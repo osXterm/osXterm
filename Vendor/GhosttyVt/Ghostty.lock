@@ -1,0 +1,6 @@
+# Ghostty virtual-terminal engine source pin.
+GHOSTTY_SOURCE_URL="https://github.com/ghostty-org/ghostty.git"
+GHOSTTY_COMMIT="4c725242b7dbe8c77c6e227ef1f9540c5ef17921"
+GHOSTTY_LICENSE="MIT"
+GHOSTTY_ZIG_VERSION="0.16.0"
+GHOSTTY_LIB_VERSION="0.1.0"
