@@ -4,6 +4,8 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleIconFile</key>
+    <string>osXterm.icns</string>
     <key>CFBundleDisplayName</key>
     <string>osXterm</string>
     <key>CFBundleExecutable</key>

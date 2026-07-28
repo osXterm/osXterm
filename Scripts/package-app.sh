@@ -22,6 +22,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$PROJECT_DIR/.build/debug/osXterm" "$MACOS_DIR/osXterm"
 cp "$PROJECT_DIR/.build/debug/osXtermAskPass" "$MACOS_DIR/osXtermAskPass"
 cp "$PROJECT_DIR/Packaging/Info.plist" "$CONTENTS_DIR/Info.plist"
+cp "$PROJECT_DIR/Packaging/osXterm.icns" "$RESOURCES_DIR/osXterm.icns"
 chmod 755 "$MACOS_DIR/osXterm" "$MACOS_DIR/osXtermAskPass"
 
 codesign --force --sign - "$MACOS_DIR/osXtermAskPass"
