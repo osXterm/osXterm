@@ -23,6 +23,11 @@ cp "$PROJECT_DIR/.build/debug/osXterm" "$MACOS_DIR/osXterm"
 cp "$PROJECT_DIR/.build/debug/osXtermAskPass" "$MACOS_DIR/osXtermAskPass"
 cp "$PROJECT_DIR/Packaging/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$PROJECT_DIR/Packaging/osXterm.icns" "$RESOURCES_DIR/osXterm.icns"
+mkdir -p "$RESOURCES_DIR/THIRD_PARTY_NOTICES"
+cp "$PROJECT_DIR/LICENSE" "$RESOURCES_DIR/LICENSE.txt"
+cp "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$RESOURCES_DIR/THIRD_PARTY_NOTICES.md"
+cp "$PROJECT_DIR/Vendor/GhosttyVt/LICENSE" \
+    "$RESOURCES_DIR/THIRD_PARTY_NOTICES/Ghostty-LICENSE.txt"
 chmod 755 "$MACOS_DIR/osXterm" "$MACOS_DIR/osXtermAskPass"
 
 codesign --force --sign - "$MACOS_DIR/osXtermAskPass"

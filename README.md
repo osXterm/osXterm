@@ -26,6 +26,13 @@ Scripts/create-release-archive.sh 0.1.0
 The package script creates `.build/app/osXterm.app`. The release script writes the
 Homebrew release asset to `dist/osXterm-0.1.0.zip` and prints its SHA256 value.
 
+## Licensing
+
+osXterm source code is licensed under the MIT License. The app embeds the
+Ghostty VT engine, which is also distributed under the MIT License. The
+copyright and license notices for both osXterm and Ghostty are included in the
+app bundle under `Contents/Resources` and in `THIRD_PARTY_NOTICES.md`.
+
 ## Settings migration
 
 Current settings are stored under `~/.config/osXterm/`. On first launch after an
