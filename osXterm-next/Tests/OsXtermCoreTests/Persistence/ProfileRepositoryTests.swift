@@ -19,7 +19,8 @@ struct ProfileRepositoryTests {
         try await repository.save(profile)
 
         let text = try String(contentsOf: fileURL, encoding: .utf8)
-        #expect(text.contains(secret.id.uuidString.lowercased()))
+        #expect(text.uppercased().contains(secret.id.uuidString.uppercased()))
+        #expect(!text.contains(secret.keychainAccount))
         #expect(!text.contains("not-a-real-password"))
         let restored = await repository.profile(id: profile.id)
         #expect(restored?.name == "test")

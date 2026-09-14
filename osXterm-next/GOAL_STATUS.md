@@ -30,7 +30,8 @@ Not complete. The source implementation and verification harness are substantial
 - `swiftc -typecheck` passed for all `OsXtermCore` sources using the Xcode 26 SDK and arm64 macOS 26 target.
 - The same direct typecheck passed for all app sources with the fixed SwiftTerm module, plus AskPass, proxy helper, and integration runner source.
 - The terminal theme bridge typechecks against SwiftTerm 1.19.0's native color and palette APIs; live visual verification remains part of the blocked app-run gate.
-- Swift test files passed parser validation.
+- All 39 Swift Testing core tests passed macro expansion and type checking with the Xcode Testing plugin.
+- A manually linked Swift Testing runner executed 38 of 39 core tests successfully. The remaining credential-broker IPC test could not bind a Unix-domain socket because this workspace runs under `CODEX_SANDBOX=seatbelt` and received `EPERM`; it remains unverified and is not counted as passed.
 - A standalone arm64 smoke executable ran `SFTPResumeIntegrityVerifier` against a deterministic structured SFTP transport. It accepted matching prefix bytes and rejected changed prefix bytes.
 - A standalone arm64 smoke executable parsed an SSH config preview and confirmed that a target cannot be imported without its referenced jump profile.
 - `Package.resolved` resolved SwiftTerm 1.19.0 at the pinned revision.

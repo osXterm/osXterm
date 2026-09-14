@@ -122,7 +122,8 @@ struct SSHRouteAndCommandTests {
         #expect(config.contains("'--target-host' '%h' '--target-port' '%p'"))
         #expect(config.contains("'--credential-socket' '/private/tmp/proxy-broker.sock' '--credential-token' 'unit-test-token' '--username' 'build'"))
         #expect(!config.contains("secret-"))
-        #expect(!config.contains("password"))
+        #expect(config.contains("PreferredAuthentications keyboard-interactive,password"))
+        #expect(!config.contains(secret.keychainAccount))
         #expect(prepared.invocation.requiresAskPass)
         #expect(prepared.invocation.credentialRequirements.contains(.proxy(
             secret: secret,
