@@ -11,6 +11,7 @@ fi
 
 "$project_dir/Scripts/check-environment.sh" --integration
 "$project_dir/Scripts/verify-font-resources.sh"
+"$project_dir/Scripts/verify-terminal-catalog.sh"
 swift package resolve
 swift test --parallel
 "$project_dir/Scripts/run-integration-tests.sh"

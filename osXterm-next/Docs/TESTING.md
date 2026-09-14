@@ -18,6 +18,12 @@ four included license files, and Core Text registration against the expected
 PostScript names. `Scripts/package-app.sh` and `Scripts/verify-dmg.sh` also
 fail when an expected font or license resource is absent from the packaged app.
 
+`Scripts/verify-terminal-catalog.sh` checks that all 20 declared terminal
+themes have a terminal-surface palette and are exposed in Settings. It also
+checks the four bundled-font choices, their settings picker, and the adapter
+paths that apply the selected palette and bundled font. It rejects an app
+source that exposes the macOS system font picker.
+
 ## Integration fixture
 
 `Scripts/run-integration-tests.sh` creates temporary integration keys under `Integration/fixtures`, which is ignored by Git. Compose exposes only loopback ports:
@@ -57,6 +63,7 @@ Do not record a release as passing from unit tests alone. A running SSH process 
 
 - Core, app, helper, and integration-runner source typechecks passed with the installed Xcode toolchain.
 - A standalone arm64 SwiftTerm terminal smoke executable fed a terminal buffer and verified next-match navigation, search clearing, case-sensitive matching, regular-expression matching, and whole-word matching through the public SwiftTerm API.
+- `Scripts/verify-terminal-catalog.sh` verified all 20 terminal themes, four bundled terminal fonts, their Settings pickers, and their terminal-adapter paths.
 - Swift test source syntax, shell script syntax, Compose YAML, Info.plist, icon container, and proxy Python syntax passed local static validation.
 - A manually linked Swift Testing runner executed all 56 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange, live loopback TCP and Unix socket destination probes, broadcast source, recipient routing, disconnected-target pruning, concurrent-session title allocation checks, installed OpenSSH capability checks, workspace persistence and version rejection, and session-log export content, replacement, cleanup, and mode-0600 assertions. This is supplemental evidence only; the supported `swift test` gate remains unverified.
 - The local `/usr/bin/ssh` reported `OpenSSH_10.3p1, LibreSSL 3.3.6` and passed the required ProxyJump, remote dynamic forwarding, Unix socket forwarding, and SFTP-backed SCP capability checks.
