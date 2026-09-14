@@ -50,4 +50,17 @@ struct BroadcastInputRouterTests {
         #expect(filteredRecipients == [readyRecipient])
         #expect(singleMemberRecipients.isEmpty)
     }
+
+    @Test
+    func activeSessionIDsDropDisconnectedSelections() {
+        let readySession = UUID()
+        let disconnectedSession = UUID()
+
+        let active = BroadcastInputRouter.activeSessionIDs(
+            selectedSessionIDs: [readySession, disconnectedSession],
+            readySessionIDs: [readySession]
+        )
+
+        #expect(active == [readySession])
+    }
 }

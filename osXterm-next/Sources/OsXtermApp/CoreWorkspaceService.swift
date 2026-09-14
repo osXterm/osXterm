@@ -460,6 +460,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
     func disconnect(sessionID: UUID) async throws {
         try await loadIfNeeded()
         guard let session = sessions[sessionID] else { throw CoreWorkspaceServiceError.sessionNotFound }
+        broadcastTargetSessionIDs.remove(sessionID)
         session.userRequestedStop = true
         session.challengeGate?.cancelAll()
         session.launch = nil
@@ -1351,6 +1352,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
     func terminalProcessDidTerminate(sessionID: UUID, launchID: UUID, exitCode: Int32?) async throws {
         try await loadIfNeeded()
         guard let session = sessions[sessionID], session.launch?.launchID == launchID else { return }
+        broadcastTargetSessionIDs.remove(sessionID)
         let wasConnected = session.state == .connected
         let profile = session.profileID.flatMap { id in profileDocument.profiles.first(where: { $0.id == id }) }
         session.launch = nil
@@ -1420,6 +1422,9 @@ final class CoreWorkspaceService: AppWorkspaceService {
                 session.state = .failed(message)
             }
         }
+        if !session.state.isInputReady {
+            broadcastTargetSessionIDs.remove(sessionID)
+        }
         emitSnapshot()
     }
 
@@ -1434,15 +1439,21 @@ final class CoreWorkspaceService: AppWorkspaceService {
         let readySessionIDs = Set(sessions.compactMap { id, candidate in
             candidate.state.isInputReady ? id : nil
         })
+        let activeBroadcastSessionIDs = BroadcastInputRouter.activeSessionIDs(
+            selectedSessionIDs: broadcastTargetSessionIDs,
+            readySessionIDs: readySessionIDs
+        )
+        let didPruneBroadcastTargets = activeBroadcastSessionIDs != broadcastTargetSessionIDs
+        broadcastTargetSessionIDs = activeBroadcastSessionIDs
         let recipients = BroadcastInputRouter.recipients(
             sourceID: sessionID,
-            selectedSessionIDs: broadcastTargetSessionIDs,
+            selectedSessionIDs: activeBroadcastSessionIDs,
             readySessionIDs: readySessionIDs
         )
         for targetID in recipients {
             enqueueTerminalInput(data, to: targetID)
         }
-        if !recipients.isEmpty {
+        if didPruneBroadcastTargets || !recipients.isEmpty {
             emitSnapshot()
         }
     }

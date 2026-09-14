@@ -48,7 +48,7 @@ Expected integration coverage:
 
 ## Required human pass
 
-Before release, launch the extracted app and record screenshots for the connection, SFTP, and tunnel panels. Exercise Korean IME, copy and paste, terminal search, terminal resize, `vim`, `less`, and `top`, all 20 terminal themes, every bundled terminal font, light and dark appearance, small and large windows, repeated connects and disconnects, and ten simultaneous sessions. With two or more checked sessions, verify that broadcast input reaches only the other checked ready sessions and that input from an unchecked session remains private. Inspect Activity Monitor or equivalent evidence for residual helpers and tunnel processes after shutdown.
+Before release, launch the extracted app and record screenshots for the connection, SFTP, and tunnel panels. Exercise Korean IME, copy and paste, terminal search, terminal resize, `vim`, `less`, and `top`, all 20 terminal themes, every bundled terminal font, light and dark appearance, small and large windows, repeated connects and disconnects, and ten simultaneous sessions. With two or more checked sessions, verify that broadcast input reaches only the other checked ready sessions, that input from an unchecked session remains private, and that a disconnect clears its target before reconnect. Inspect Activity Monitor or equivalent evidence for residual helpers and tunnel processes after shutdown.
 
 Do not record a release as passing from unit tests alone. A running SSH process is not a connected session, and a listener is not proof that the destination service is reachable.
 
@@ -56,7 +56,7 @@ Do not record a release as passing from unit tests alone. A running SSH process 
 
 - Core, app, helper, and integration-runner source typechecks passed with the installed Xcode toolchain.
 - Swift test source syntax, shell script syntax, Compose YAML, Info.plist, icon container, and proxy Python syntax passed local static validation.
-- A manually linked Swift Testing runner executed all 52 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange, live loopback TCP and Unix socket destination probes, broadcast source and recipient routing checks, installed OpenSSH capability checks, workspace persistence and version rejection, and session-log export content, replacement, cleanup, and mode-0600 assertions. This is supplemental evidence only; the supported `swift test` gate remains unverified.
+- A manually linked Swift Testing runner executed all 53 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange, live loopback TCP and Unix socket destination probes, broadcast source, recipient routing, and disconnected-target pruning checks, installed OpenSSH capability checks, workspace persistence and version rejection, and session-log export content, replacement, cleanup, and mode-0600 assertions. This is supplemental evidence only; the supported `swift test` gate remains unverified.
 - The local `/usr/bin/ssh` reported `OpenSSH_10.3p1, LibreSSL 3.3.6` and passed the required ProxyJump, remote dynamic forwarding, Unix socket forwarding, and SFTP-backed SCP capability checks.
 - The fixture credential preparation script ran and produced ignored test-only keys plus a valid user certificate.
 - Full `swift test`, Compose integration, package build, DMG extraction, and UI pass are unverified in this workspace. Xcode reports an unaccepted license and Docker is not installed.

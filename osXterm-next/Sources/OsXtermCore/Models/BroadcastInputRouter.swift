@@ -5,20 +5,30 @@ import Foundation
 /// source. This prevents an unchecked terminal from unexpectedly sending its
 /// input to another session.
 public enum BroadcastInputRouter {
+    /// Keeps only currently ready sessions in a broadcast selection. Callers
+    /// use this when a terminal disconnects so a reconnect never silently
+    /// resumes a previously active broadcast group.
+    public static func activeSessionIDs(
+        selectedSessionIDs: Set<UUID>,
+        readySessionIDs: Set<UUID>
+    ) -> Set<UUID> {
+        selectedSessionIDs.intersection(readySessionIDs)
+    }
+
     public static func recipients(
         sourceID: UUID,
         selectedSessionIDs: Set<UUID>,
         readySessionIDs: Set<UUID>
     ) -> Set<UUID> {
-        guard selectedSessionIDs.contains(sourceID),
-              readySessionIDs.contains(sourceID),
-              selectedSessionIDs.count > 1
+        let activeSessionIDs = activeSessionIDs(
+            selectedSessionIDs: selectedSessionIDs,
+            readySessionIDs: readySessionIDs
+        )
+        guard activeSessionIDs.contains(sourceID), activeSessionIDs.count > 1
         else {
             return []
         }
 
-        return selectedSessionIDs
-            .intersection(readySessionIDs)
-            .subtracting([sourceID])
+        return activeSessionIDs.subtracting([sourceID])
     }
 }

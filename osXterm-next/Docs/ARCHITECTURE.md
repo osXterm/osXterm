@@ -42,6 +42,9 @@ SCP forces SFTP transport mode. Its process is retained by the transfer queue so
 `CoreWorkspaceService` runs on the main actor for coherent presentation state while SFTP's actor and process I/O do their work outside the SwiftUI rendering path. A terminal is not marked connected just because a child process launched: OpenSSH output must show successful authentication or an interactive channel. A tunnel listener is tracked separately from a destination probe result.
 
 Workspace restoration restores descriptors and layout metadata. It never restarts commands or macros and never represents a terminated remote shell as recovered. Every connect action creates an independent terminal session, so one profile can have multiple concurrent SSH processes. Broadcast input is empty by default. It activates only when the source session and at least one recipient are explicitly checked and ready, then mirrors the input to the other checked ready sessions.
+The service removes a target when its process stops, it disconnects, or it enters
+a non-ready authentication or failure state. A reconnect therefore requires an
+explicit new broadcast selection.
 
 `TerminalFont` stores a bundled font's PostScript name. At app launch,
 `BundledTerminalFontRegistry` registers D2 Coding, JetBrains Mono, Fira Code,
