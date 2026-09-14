@@ -481,16 +481,11 @@ struct OsXtermIntegrationRunner {
         guard let partialSize = partialAttributes.size else {
             throw IntegrationRunnerError.assertionFailed("The resumable SFTP prefix has no reported size.")
         }
-        let localPrefixDigest = try localPrefixSHA256(
-            at: sourceURL,
+        let prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
+            localURL: sourceURL,
+            remotePath: remote,
             byteCount: Int64(partialSize)
         )
-        let remotePrefixDigest = try await remotePrefixSHA256(
-            at: remote,
-            byteCount: Int64(partialSize),
-            client: client
-        )
-        let prefixDigestMatches = localPrefixDigest != nil && localPrefixDigest == remotePrefixDigest
         let decision = TransferResumePlanner.decide(
             existingDestinationBytes: Int64(partialSize),
             previousSource: sourceFingerprint,
@@ -553,55 +548,6 @@ struct OsXtermIntegrationRunner {
         try destinationWriter.close()
         guard Data(downloadedHasher.finalize()) == expectedDigest else {
             throw IntegrationRunnerError.assertionFailed("The resumed 100 MiB SFTP transfer failed SHA-256 integrity verification.")
-        }
-    }
-
-    private static func localPrefixSHA256(at url: URL, byteCount: Int64) throws -> Data? {
-        guard byteCount > 0 else { return nil }
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        var remaining = byteCount
-        var hasher = SHA256()
-        while remaining > 0 {
-            let maximumChunkSize = Int(min(remaining, Int64(64 * 1024)))
-            let chunk = try handle.read(upToCount: maximumChunkSize) ?? Data()
-            guard !chunk.isEmpty else { return nil }
-            hasher.update(data: chunk)
-            remaining -= Int64(chunk.count)
-        }
-        return Data(hasher.finalize())
-    }
-
-    private static func remotePrefixSHA256(
-        at path: SFTPRemotePath,
-        byteCount: Int64,
-        client: SFTPClient
-    ) async throws -> Data? {
-        guard byteCount > 0 else { return nil }
-        let handle = try await client.open(path: path, flags: [.read])
-        do {
-            var remaining = byteCount
-            var offset: UInt64 = 0
-            var hasher = SHA256()
-            while remaining > 0 {
-                let maximumChunkSize = UInt32(min(remaining, Int64(64 * 1024)))
-                guard let chunk = try await client.read(
-                    from: handle,
-                    offset: offset,
-                    length: maximumChunkSize
-                ), !chunk.isEmpty else {
-                    try await client.close(handle)
-                    return nil
-                }
-                hasher.update(data: chunk)
-                remaining -= Int64(chunk.count)
-                offset += UInt64(chunk.count)
-            }
-            try await client.close(handle)
-            return Data(hasher.finalize())
-        } catch {
-            try? await client.close(handle)
-            throw error
         }
     }
 

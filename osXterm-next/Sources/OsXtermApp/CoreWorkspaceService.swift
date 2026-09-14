@@ -2539,11 +2539,10 @@ final class CoreWorkspaceService: AppWorkspaceService {
            existingRemoteBytes > 0,
            existingRemoteBytes < currentSource.size,
            previousSource == currentSource {
-            prefixDigestMatches = try await localAndRemotePrefixMatch(
+            prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
                 localURL: localURL,
                 remotePath: resolvedDestination,
-                byteCount: existingRemoteBytes,
-                client: client
+                byteCount: existingRemoteBytes
             )
         } else {
             prefixDigestMatches = false
@@ -2659,11 +2658,10 @@ final class CoreWorkspaceService: AppWorkspaceService {
            existingLocalBytes > 0,
            existingLocalBytes < currentSource.size,
            previousSource == currentSource {
-            prefixDigestMatches = try await localAndRemotePrefixMatch(
+            prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
                 localURL: destination,
                 remotePath: source,
-                byteCount: existingLocalBytes,
-                client: client
+                byteCount: existingLocalBytes
             )
         } else {
             prefixDigestMatches = false
@@ -2867,90 +2865,6 @@ final class CoreWorkspaceService: AppWorkspaceService {
             size: Int64(size),
             modificationTime: attributes.modificationTime.map { Date(timeIntervalSince1970: TimeInterval($0)) }
         )
-    }
-
-    /// Confirms that the already transferred byte range still has identical
-    /// contents on both sides before append mode is used. Metadata alone is
-    /// not enough when a file changes without a timestamp resolution change.
-    private func localAndRemotePrefixMatch(
-        localURL: URL,
-        remotePath: SFTPRemotePath,
-        byteCount: Int64,
-        client: SFTPClient
-    ) async throws -> Bool {
-        guard byteCount > 0 else { return false }
-        guard let localDigest = try await localPrefixSHA256(at: localURL, byteCount: byteCount),
-              let remoteDigest = try await remotePrefixSHA256(
-                  at: remotePath,
-                  byteCount: byteCount,
-                  client: client
-              )
-        else {
-            return false
-        }
-        return localDigest == remoteDigest
-    }
-
-    private func localPrefixSHA256(
-        at url: URL,
-        byteCount: Int64
-    ) async throws -> Data? {
-        guard byteCount > 0 else { return nil }
-        let input = try TransferFileReader(url: url)
-        do {
-            var remaining = byteCount
-            var hasher = SHA256()
-            while remaining > 0 {
-                try Task.checkCancellation()
-                let maximumChunkSize = Int(min(remaining, Int64(64 * 1024)))
-                let chunk = try await input.read(upToCount: maximumChunkSize)
-                guard !chunk.isEmpty else {
-                    await input.close()
-                    return nil
-                }
-                hasher.update(data: chunk)
-                remaining -= Int64(chunk.count)
-            }
-            await input.close()
-            return Data(hasher.finalize())
-        } catch {
-            await input.close()
-            throw error
-        }
-    }
-
-    private func remotePrefixSHA256(
-        at path: SFTPRemotePath,
-        byteCount: Int64,
-        client: SFTPClient
-    ) async throws -> Data? {
-        guard byteCount > 0 else { return nil }
-        let handle = try await client.open(path: path, flags: [.read])
-        do {
-            var remaining = byteCount
-            var offset: UInt64 = 0
-            var hasher = SHA256()
-            while remaining > 0 {
-                try Task.checkCancellation()
-                let maximumChunkSize = UInt32(min(remaining, Int64(64 * 1024)))
-                guard let chunk = try await client.read(
-                    from: handle,
-                    offset: offset,
-                    length: maximumChunkSize
-                ), !chunk.isEmpty else {
-                    try await client.close(handle)
-                    return nil
-                }
-                hasher.update(data: chunk)
-                remaining -= Int64(chunk.count)
-                offset += UInt64(chunk.count)
-            }
-            try await client.close(handle)
-            return Data(hasher.finalize())
-        } catch {
-            try? await client.close(handle)
-            throw error
-        }
     }
 
     private func remoteEditFingerprint(

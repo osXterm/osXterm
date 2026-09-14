@@ -30,6 +30,7 @@ Not complete. The source implementation and verification harness are substantial
 - `swiftc -typecheck` passed for all `OsXtermCore` sources using the Xcode 26 SDK and arm64 macOS 26 target.
 - The same direct typecheck passed for all app sources with the fixed SwiftTerm module, plus AskPass, proxy helper, and integration runner source.
 - Swift test files passed parser validation.
+- A standalone arm64 smoke executable ran `SFTPResumeIntegrityVerifier` against a deterministic structured SFTP transport. It accepted matching prefix bytes and rejected changed prefix bytes.
 - `Package.resolved` resolved SwiftTerm 1.19.0 at the pinned revision.
 - `plutil -lint Packaging/Info.plist`, Xcode project plist syntax, icon-container inspection, all shell-script syntax, Compose YAML parsing, and proxy Python compilation passed.
 - `Scripts/prepare-integration-fixture.sh` ran successfully and its generated OpenSSH user certificate was inspected with `ssh-keygen -L`.

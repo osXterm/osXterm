@@ -10,7 +10,7 @@
 | `osXterm` | SwiftUI workspace, AppKit and SwiftTerm PTY surface, state presentation, host-key and credential dialogs, profile and tunnel editors, SFTP inspector, settings, and menu-bar tunnel controls. |
 | `osXtermAskPass` | Receives one OpenSSH prompt and returns a session-scoped broker response. It writes no diagnostics. |
 | `osXtermProxy` | Establishes HTTP CONNECT or SOCKS5 streams for `ProxyCommand`, including optional proxy authentication over the same broker. |
-| `osXtermIntegrationRunner` | Calls the route compiler, SFTP transport, SCP plan, and tunnel compiler against the isolated Compose fixture. |
+| `osXtermIntegrationRunner` | Calls the route compiler, SFTP transport and resume verifier, SCP plan, and tunnel compiler against the isolated Compose fixture. |
 
 ## Route and process boundary
 
@@ -33,7 +33,7 @@ The app owns `Application Support/osXterm/known_hosts`. First contact is present
 
 ## Transfer boundary
 
-`SFTPClient` uses binary SFTP v3 frames, attributes, and handles. It does not parse human-readable `ls` output. Transfer planning validates file URLs, root restrictions, remote NUL boundaries, conflict decisions, source fingerprints, and conservative SCP path syntax. Recursive SFTP transfer preserves file names, including whitespace and Unicode, and represents symlinks through protocol messages.
+`SFTPClient` uses binary SFTP v3 frames, attributes, and handles. It does not parse human-readable `ls` output. Transfer planning validates file URLs, root restrictions, remote NUL boundaries, conflict decisions, source fingerprints, and conservative SCP path syntax. `SFTPResumeIntegrityVerifier` compares the SHA-256 digest of a local and remote partial prefix before any single-file retry appends. Recursive SFTP transfer preserves file names, including whitespace and Unicode, and represents symlinks through protocol messages.
 
 SCP forces SFTP transport mode. Its process is retained by the transfer queue so cancellation terminates the actual child process. The queue state reducer distinguishes preparation, transfer, cancellation, retry, completion, and failure.
 
