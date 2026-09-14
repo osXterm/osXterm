@@ -243,11 +243,13 @@ public enum TransferResumePlanner {
     public static func decide(
         existingDestinationBytes: Int64,
         previousSource: TransferSourceFingerprint?,
-        currentSource: TransferSourceFingerprint
+        currentSource: TransferSourceFingerprint,
+        prefixDigestMatches: Bool
     ) -> TransferResumeDecision {
         guard existingDestinationBytes > 0,
               existingDestinationBytes < currentSource.size,
-              previousSource == currentSource
+              previousSource == currentSource,
+              prefixDigestMatches
         else {
             return .restart
         }

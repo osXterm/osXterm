@@ -105,7 +105,8 @@ struct TransferTaskPlanningTests {
             TransferResumePlanner.decide(
                 existingDestinationBytes: 42,
                 previousSource: fingerprint,
-                currentSource: fingerprint
+                currentSource: fingerprint,
+                prefixDigestMatches: true
             ) == .resume(fromOffset: 42)
         )
         #expect(
@@ -115,7 +116,16 @@ struct TransferTaskPlanningTests {
                 currentSource: TransferSourceFingerprint(
                     size: 100,
                     modificationTime: Date(timeIntervalSince1970: 11)
-                )
+                ),
+                prefixDigestMatches: true
+            ) == .restart
+        )
+        #expect(
+            TransferResumePlanner.decide(
+                existingDestinationBytes: 42,
+                previousSource: fingerprint,
+                currentSource: fingerprint,
+                prefixDigestMatches: false
             ) == .restart
         )
     }

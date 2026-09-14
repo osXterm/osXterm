@@ -37,7 +37,7 @@ Expected integration coverage:
 - proxy-only and proxy-plus-two-hop routes;
 - HTTP CONNECT and SOCKS5, with no authentication and with Basic or username/password authentication;
 - password, encrypted private-key, SSH agent, OpenSSH certificate, and keyboard-interactive authentication;
-- SFTP v3 Unicode and quoted file names, SFTP-backed SCP upload/download, and a 100 MiB partial-file resume with streamed SHA-256 verification;
+- SFTP v3 Unicode and quoted file names, SFTP-backed SCP upload/download, and a 100 MiB partial-file resume that verifies source metadata, the partial prefix SHA-256, and the final streamed SHA-256 digest;
 - local, remote, dynamic, remote dynamic, local Unix-socket, remote Unix-socket, remote port zero, port conflict, and server forwarding denial;
 - data echo through each listener instead of process-launch inference.
 
