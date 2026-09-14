@@ -426,7 +426,11 @@ final class CoreWorkspaceService: AppWorkspaceService {
         guard let profile = profileDocument.profiles.first(where: { $0.id == profileID }) else {
             throw CoreWorkspaceServiceError.profileNotFound
         }
-        let descriptor = TerminalSessionDescriptor(title: profile.name, kind: .profile(profile.id), shouldLog: workspaceDocument.settings.sessionLoggingEnabled)
+        let descriptor = TerminalSessionDescriptor(
+            title: nextSessionTitle(base: profile.name),
+            kind: .profile(profile.id),
+            shouldLog: workspaceDocument.settings.sessionLoggingEnabled
+        )
         let session = ManagedTerminalSession(descriptor: descriptor, state: .connecting)
         sessions[session.id] = session
         sessionOrder.append(session.id)
@@ -439,7 +443,11 @@ final class CoreWorkspaceService: AppWorkspaceService {
 
     func startLocalTerminal() async throws {
         try await loadIfNeeded()
-        let descriptor = TerminalSessionDescriptor(title: AppText.string("Local Shell", korean: "로컬 셸"), kind: .localShell, shouldLog: workspaceDocument.settings.sessionLoggingEnabled)
+        let descriptor = TerminalSessionDescriptor(
+            title: nextSessionTitle(base: AppText.string("Local Shell", korean: "로컬 셸")),
+            kind: .localShell,
+            shouldLog: workspaceDocument.settings.sessionLoggingEnabled
+        )
         let session = ManagedTerminalSession(descriptor: descriptor, state: .connecting)
         let shell = localShellPath()
         session.launch = TerminalProcessLaunchPresentation(
@@ -548,6 +556,13 @@ final class CoreWorkspaceService: AppWorkspaceService {
         case let .profile(profileID):
             try await connect(profileID: profileID)
         }
+    }
+
+    private func nextSessionTitle(base: String) -> String {
+        TerminalSessionTitleAllocator.nextTitle(
+            base: base,
+            existingTitles: sessions.values.map(\.descriptor.title)
+        )
     }
 
     func moveSession(id: UUID, toIndex: Int) async throws {
