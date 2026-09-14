@@ -237,6 +237,9 @@ public struct TransferSourceFingerprint: Codable, Equatable, Hashable, Sendable 
 public enum TransferResumeDecision: Equatable, Sendable {
     case restart
     case resume(fromOffset: Int64)
+    /// The destination is a complete, digest-verified copy of the current
+    /// source. Callers may count its bytes without opening it for writing.
+    case alreadyComplete
 }
 
 public enum TransferResumePlanner {
@@ -247,13 +250,96 @@ public enum TransferResumePlanner {
         prefixDigestMatches: Bool
     ) -> TransferResumeDecision {
         guard existingDestinationBytes > 0,
-              existingDestinationBytes < currentSource.size,
+              existingDestinationBytes <= currentSource.size,
               previousSource == currentSource,
               prefixDigestMatches
         else {
             return .restart
         }
+        if existingDestinationBytes == currentSource.size {
+            return .alreadyComplete
+        }
         return .resume(fromOffset: existingDestinationBytes)
+    }
+}
+
+/// Identifies a single entry in an in-memory recursive transfer checkpoint.
+/// Local and remote strings are deliberately distinct key spaces so a file
+/// named like a remote path cannot select another direction's checkpoint.
+public enum RecursiveTransferResumeKey: Hashable, Sendable {
+    case localFile(path: String)
+    case remoteFile(path: String)
+
+    public static func localFile(at url: URL) throws -> Self {
+        let localURL = try TransferPlanner.validateLocalURL(url)
+        return .localFile(path: localURL.path)
+    }
+
+    public static func remoteFile(at path: SFTPRemotePath) -> Self {
+        .remoteFile(path: path.rawValue)
+    }
+}
+
+/// The resolved leaf destination is retained for a retry. This prevents a
+/// recursive transfer with a rename policy from allocating a second name for
+/// a partially transferred file.
+public enum RecursiveTransferResumeDestination: Equatable, Sendable {
+    case localFile(URL)
+    case remoteFile(SFTPRemotePath)
+}
+
+public struct RecursiveTransferResumeCheckpoint: Equatable, Sendable {
+    public let sourceFingerprint: TransferSourceFingerprint
+    public let destination: RecursiveTransferResumeDestination
+
+    public init(
+        sourceFingerprint: TransferSourceFingerprint,
+        destination: RecursiveTransferResumeDestination
+    ) {
+        self.sourceFingerprint = sourceFingerprint
+        self.destination = destination
+    }
+}
+
+/// Per-leaf checkpoint data for one managed transfer. It intentionally is not
+/// Codable: a process restart has no trusted record of every resolved child,
+/// so the coordinator restarts that recursive task under its normal conflict
+/// policy instead of guessing which partial path can be appended.
+public struct RecursiveTransferResumeLedger: Sendable {
+    private var checkpoints: [RecursiveTransferResumeKey: RecursiveTransferResumeCheckpoint]
+    private var directories: [RecursiveTransferResumeKey: RecursiveTransferResumeDestination]
+
+    public init() {
+        checkpoints = [:]
+        directories = [:]
+    }
+
+    public func checkpoint(
+        for key: RecursiveTransferResumeKey
+    ) -> RecursiveTransferResumeCheckpoint? {
+        checkpoints[key]
+    }
+
+    public mutating func record(
+        _ checkpoint: RecursiveTransferResumeCheckpoint,
+        for key: RecursiveTransferResumeKey
+    ) {
+        checkpoints[key] = checkpoint
+    }
+
+    public mutating func removeCheckpoint(for key: RecursiveTransferResumeKey) {
+        checkpoints.removeValue(forKey: key)
+    }
+
+    public func directoryDestination(for key: RecursiveTransferResumeKey) -> RecursiveTransferResumeDestination? {
+        directories[key]
+    }
+
+    public mutating func recordDirectory(
+        _ destination: RecursiveTransferResumeDestination,
+        for key: RecursiveTransferResumeKey
+    ) {
+        directories[key] = destination
     }
 }
 

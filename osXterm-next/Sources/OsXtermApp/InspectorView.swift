@@ -595,7 +595,7 @@ private struct TransferRow: View {
                 case .failed:
                     Button(AppText.string("Retry", korean: "다시 시도")) { model.retryTransfer(id: transfer.id) }
                         .buttonStyle(.borderless)
-                case .completed, .cancelled:
+                case .completed, .completedWithSkipped, .cancelled:
                     EmptyView()
                 }
             }
@@ -633,6 +633,7 @@ private struct TransferPhaseLabel: View {
         case .transferring: AppText.string("Transferring", korean: "전송 중")
         case .paused: AppText.string("Paused", korean: "일시 중지")
         case .completed: AppText.string("Complete", korean: "완료")
+        case let .completedWithSkipped(count): AppText.string("Complete, \(count) skipped", korean: "완료, \(count)개 건너뜀")
         case .failed: AppText.string("Failed", korean: "실패")
         case .cancelled: AppText.string("Cancelled", korean: "취소됨")
         }
@@ -643,7 +644,7 @@ private struct TransferPhaseLabel: View {
         case .completed: .green
         case .failed: .red
         case .transferring, .preparing: .accentColor
-        case .queued, .paused, .cancelled: .secondary
+        case .queued, .paused, .cancelled, .completedWithSkipped: .secondary
         }
     }
 }

@@ -131,6 +131,85 @@ struct TransferTaskPlanningTests {
     }
 
     @Test
+    func verifiedCompleteDestinationDoesNotGetTruncatedOnRetry() {
+        let fingerprint = TransferSourceFingerprint(
+            size: 100,
+            modificationTime: Date(timeIntervalSince1970: 10)
+        )
+
+        #expect(
+            TransferResumePlanner.decide(
+                existingDestinationBytes: 100,
+                previousSource: fingerprint,
+                currentSource: fingerprint,
+                prefixDigestMatches: true
+            ) == .alreadyComplete
+        )
+        #expect(
+            TransferResumePlanner.decide(
+                existingDestinationBytes: 101,
+                previousSource: fingerprint,
+                currentSource: fingerprint,
+                prefixDigestMatches: true
+            ) == .restart
+        )
+    }
+
+    @Test
+    func recursiveLedgerKeepsResolvedLeafDestinationAndDirectionSeparate() throws {
+        let fingerprint = TransferSourceFingerprint(
+            size: 4_096,
+            modificationTime: Date(timeIntervalSince1970: 99)
+        )
+        let localSource = URL(fileURLWithPath: "/private/tmp/osxterm-source/child/../report.txt")
+        let remoteSource = try SFTPRemotePath(rawValue: "/srv/source/report.txt")
+        let localKey = try RecursiveTransferResumeKey.localFile(at: localSource)
+        let remoteKey = RecursiveTransferResumeKey.remoteFile(at: remoteSource)
+        let resolvedRemote = try SFTPRemotePath(rawValue: "/srv/target/report (1).txt")
+        let resolvedLocal = URL(fileURLWithPath: "/private/tmp/osxterm-target/report (1).txt")
+        var ledger = RecursiveTransferResumeLedger()
+
+        ledger.record(
+            RecursiveTransferResumeCheckpoint(
+                sourceFingerprint: fingerprint,
+                destination: .remoteFile(resolvedRemote)
+            ),
+            for: localKey
+        )
+        ledger.record(
+            RecursiveTransferResumeCheckpoint(
+                sourceFingerprint: fingerprint,
+                destination: .localFile(resolvedLocal)
+            ),
+            for: remoteKey
+        )
+
+        #expect(
+            ledger.checkpoint(for: localKey) == RecursiveTransferResumeCheckpoint(
+                sourceFingerprint: fingerprint,
+                destination: .remoteFile(resolvedRemote)
+            )
+        )
+        #expect(
+            ledger.checkpoint(for: remoteKey) == RecursiveTransferResumeCheckpoint(
+                sourceFingerprint: fingerprint,
+                destination: .localFile(resolvedLocal)
+            )
+        )
+        #expect(localKey != remoteKey)
+    }
+
+    @Test
+    func recursiveRetryRetainsRenamedDirectorySeparatelyFromLeafCheckpoints() throws {
+        var ledger = RecursiveTransferResumeLedger()
+        let key = RecursiveTransferResumeKey.remoteFile(at: try SFTPRemotePath(rawValue: "/srv/project/nested"))
+        let renamed = URL(fileURLWithPath: "/private/tmp/download/project (1)/nested (2)")
+        ledger.recordDirectory(.localFile(renamed), for: key)
+        #expect(ledger.directoryDestination(for: key) == .localFile(renamed))
+        #expect(ledger.checkpoint(for: key) == nil)
+    }
+
+    @Test
     func retryKeepsTheSourceFingerprintNeededForSafeResume() throws {
         let fingerprint = TransferSourceFingerprint(
             size: 100,

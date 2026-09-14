@@ -200,12 +200,13 @@ enum TransferPhasePresentation: Hashable {
     case transferring
     case paused
     case completed
+    case completedWithSkipped(Int)
     case failed(String)
     case cancelled
 
     var isTerminal: Bool {
         switch self {
-        case .completed, .failed, .cancelled:
+        case .completed, .completedWithSkipped, .failed, .cancelled:
             true
         case .queued, .preparing, .transferring, .paused:
             false

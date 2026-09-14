@@ -15,6 +15,8 @@ public enum SFTPClientError: Error, Equatable, Sendable, LocalizedError {
     case transportClosed
     case unexpectedResponse(requestID: UInt32, response: SFTPResponse)
     case remoteStatus(requestID: UInt32, status: SFTPStatus, message: String)
+    case unsafeDirectoryEntry(String)
+    case duplicateDirectoryEntry(String)
 
     public var errorDescription: String? {
         switch self {
@@ -28,6 +30,10 @@ public enum SFTPClientError: Error, Equatable, Sendable, LocalizedError {
             "SFTP request \(requestID) received an unexpected response: \(response)"
         case let .remoteStatus(requestID, status, message):
             "SFTP request \(requestID) failed with status \(status.rawValue): \(message)"
+        case let .unsafeDirectoryEntry(name):
+            "SFTP directory entry is not a single file name: \(name.debugDescription)"
+        case let .duplicateDirectoryEntry(name):
+            "SFTP directory returned the same name more than once: \(name.debugDescription)"
         }
     }
 }
@@ -59,6 +65,8 @@ public actor SFTPClient {
     private var nextRequestID: UInt32 = 1
     private var capabilities: SFTPServerCapabilities?
     private var pendingResponses: [UInt32: [SFTPResponse]] = [:]
+    private var requestInProgress = false
+    private var requestWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(
         transport: any SFTPByteTransport,
@@ -69,6 +77,9 @@ public actor SFTPClient {
     }
 
     public func initialize() async throws -> SFTPServerCapabilities {
+        await acquireRequestTurn()
+        defer { releaseRequestTurn() }
+        try Task.checkCancellation()
         if let capabilities { return capabilities }
 
         try await transport.send(SFTPCodec.encode(.initialize()))
@@ -185,6 +196,7 @@ public actor SFTPClient {
     public func listDirectory(_ path: SFTPRemotePath) async throws -> [SFTPNameEntry] {
         let handle = try await openDirectory(path)
         var entries: [SFTPNameEntry] = []
+        var seenNames = Set<String>()
 
         do {
             while true {
@@ -193,6 +205,19 @@ public actor SFTPClient {
                 }
                 switch response {
                 case let .name(_, page):
+                    // Directory names are untrusted server input. Consumers
+                    // append them to both remote and local paths, so reject
+                    // components that could escape the selected directory.
+                    for entry in page {
+                        guard !entry.filename.isEmpty,
+                              !entry.filename.contains("/"),
+                              !entry.filename.utf8.contains(0) else {
+                            throw SFTPClientError.unsafeDirectoryEntry(entry.filename)
+                        }
+                        guard seenNames.insert(entry.filename).inserted else {
+                            throw SFTPClientError.duplicateDirectoryEntry(entry.filename)
+                        }
+                    }
                     entries.append(contentsOf: page)
                 case let .status(_, status, _, _) where status == .endOfFile:
                     try await close(handle)
@@ -293,12 +318,34 @@ public actor SFTPClient {
     private func perform(
         _ request: (UInt32) throws -> SFTPRequest
     ) async throws -> SFTPResponse {
+        // Actors are reentrant at await points. Keep one complete request /
+        // response exchange in flight so concurrent transfers cannot consume
+        // each other's response frames from the same subsystem channel.
+        await acquireRequestTurn()
+        defer { releaseRequestTurn() }
+        try Task.checkCancellation()
         guard capabilities != nil else {
             throw SFTPClientError.handshakeRequired
         }
         let requestID = consumeRequestID()
         try await transport.send(SFTPCodec.encode(try request(requestID)))
         return try await response(for: requestID)
+    }
+
+    private func acquireRequestTurn() async {
+        if !requestInProgress {
+            requestInProgress = true
+            return
+        }
+        await withCheckedContinuation { requestWaiters.append($0) }
+    }
+
+    private func releaseRequestTurn() {
+        if requestWaiters.isEmpty {
+            requestInProgress = false
+        } else {
+            requestWaiters.removeFirst().resume()
+        }
     }
 
     private func consumeRequestID() -> UInt32 {
@@ -309,13 +356,12 @@ public actor SFTPClient {
     }
 
     private func response(for requestID: UInt32) async throws -> SFTPResponse {
-        if var pending = pendingResponses[requestID], !pending.isEmpty {
-            let result = pending.removeFirst()
-            pendingResponses[requestID] = pending.isEmpty ? nil : pending
-            return result
-        }
-
         while true {
+            if var pending = pendingResponses[requestID], !pending.isEmpty {
+                let result = pending.removeFirst()
+                pendingResponses[requestID] = pending.isEmpty ? nil : pending
+                return result
+            }
             let frame = try await nextFrame()
             let response = try SFTPCodec.decodeResponse(frame)
             guard let responseID = response.associatedRequestID else {

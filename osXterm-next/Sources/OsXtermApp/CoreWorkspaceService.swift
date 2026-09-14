@@ -223,6 +223,11 @@ private final class ManagedTransfer {
     var credentialBroker: SessionCredentialBroker?
     var challengeGate: CredentialChallengeGate?
     var diagnostics = Data()
+    /// This is deliberately scoped to the live queue item. A relaunched app
+    /// cannot prove the old per-leaf conflict decisions, so it restarts a
+    /// recursive task instead of appending to an inferred destination.
+    var recursiveResumeLedger = RecursiveTransferResumeLedger()
+    var skippedItemCount = 0
 
     init(task: TransferTask, sessionID: UUID) {
         id = task.id
@@ -280,6 +285,10 @@ private struct RemoteEditSourceFingerprint: Equatable {
 
 private enum TransferFileIOError: Error {
     case closed
+}
+
+private enum TransferConflictOutcome: Error {
+    case skipItem
 }
 
 /// File chunks are read and written on a non-main actor. Network work already
@@ -624,8 +633,16 @@ final class CoreWorkspaceService: AppWorkspaceService {
         guard let profile = profileDocument.profiles.first(where: { $0.id == id }) else {
             throw CoreWorkspaceServiceError.profileNotFound
         }
-        deleteSecrets(referencedBy: profile)
+        let dependents = profileDocument.profiles.filter { $0.id != id && $0.jumpProfileIDs.contains(id) }
+        guard dependents.isEmpty else {
+            let names = dependents.map(\.name).sorted().joined(separator: ", ")
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "This profile is used as a jump host by \(names). Edit those routes before deleting it.",
+                korean: "\(names)에서 이 프로필을 Jump host로 사용합니다. 해당 경로를 수정한 뒤 삭제하세요."
+            ))
+        }
         try await profileRepository.deleteProfile(id: id)
+        deleteSecrets(referencedBy: profile)
         profileDocument = await profileRepository.snapshot()
         emitSnapshot()
     }
@@ -1733,7 +1750,9 @@ final class CoreWorkspaceService: AppWorkspaceService {
             destinationDescription: task.direction == .upload || task.direction == .scpUpload ? task.remotePath : task.localURL.path,
             bytesTransferred: task.bytesTransferred,
             totalBytes: task.totalBytes,
-            phase: transferPhase(task.state, message: task.errorMessage),
+            phase: task.state == .completed && managed.skippedItemCount > 0
+                ? .completedWithSkipped(managed.skippedItemCount)
+                : transferPhase(task.state, message: task.errorMessage),
             sessionID: managed.sessionID
         )
     }
@@ -2382,6 +2401,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         transfer.work?.cancel()
         transfer.process?.terminate()
         transfer.diagnostics.removeAll(keepingCapacity: true)
+        transfer.skippedItemCount = 0
         let transferID = transfer.id
         transfer.work = Task { [weak self] in
             guard let self else { return }
@@ -2412,15 +2432,25 @@ final class CoreWorkspaceService: AppWorkspaceService {
                 let totalBytes = try await scpTransferTotalBytes(for: transfer.task)
                 transfer.task = try TransferTaskStateMachine.apply(.begin(totalBytes: totalBytes), to: transfer.task)
                 emitSnapshot()
-                try await runSCPTransfer(transfer)
+                if try await resumeSCPTransferViaSFTPIfSafe(transfer) == false {
+                    try await runSCPTransfer(transfer)
+                }
             }
 
             guard let current = transfers[id] else { return }
             if current.task.state == .cancelling {
                 current.task = try TransferTaskStateMachine.apply(.cancel, to: current.task)
             } else {
+                if current.skippedItemCount > 0 {
+                    current.task.totalBytes = current.task.bytesTransferred
+                }
                 current.task = try TransferTaskStateMachine.apply(.complete, to: current.task)
             }
+            emitSnapshot()
+        } catch TransferConflictOutcome.skipItem {
+            transfer.skippedItemCount += 1
+            transfer.task.totalBytes = transfer.task.bytesTransferred
+            transfer.task = (try? TransferTaskStateMachine.apply(.complete, to: transfer.task)) ?? transfer.task
             emitSnapshot()
         } catch is CancellationError {
             finishCancelledTransfer(id: id)
@@ -2447,6 +2477,73 @@ final class CoreWorkspaceService: AppWorkspaceService {
             return task.totalBytes
         case .upload, .download:
             return task.totalBytes
+        }
+    }
+
+    /// OpenSSH's `scp` process has no append mode. When a single-file SCP task
+    /// has an unchanged recorded source and a digest-verified partial prefix,
+    /// continue it through the already-established SFTP subsystem instead.
+    /// SCP is invoked with `-s`, so this uses the same SSH route and structured
+    /// file protocol without asking a legacy remote shell to interpret a path.
+    /// Recursive SCP tasks intentionally restart: their initial subprocess has
+    /// no trusted per-leaf conflict manifest to prove which renamed child can
+    /// be safely continued.
+    private func resumeSCPTransferViaSFTPIfSafe(_ transfer: ManagedTransfer) async throws -> Bool {
+        guard transfer.task.retryCount > 0,
+              !transfer.task.isRecursive,
+              let previousSource = transfer.task.sourceFingerprint
+        else {
+            return false
+        }
+
+        let connection = try await requireReadySFTP(sessionID: transfer.sessionID)
+        switch transfer.task.direction {
+        case .scpUpload:
+            let localURL = transfer.task.localURL
+            let remotePath = try SFTPRemotePath(rawValue: transfer.task.remotePath)
+            let currentSource = try localTransferFingerprint(at: localURL)
+            guard currentSource == previousSource else { return false }
+            let existingBytes = try await existingRemoteFileSize(at: remotePath, client: connection.client)
+            let decision = try await verifiedResumeDecision(
+                localURL: localURL,
+                remotePath: remotePath,
+                existingDestinationBytes: existingBytes,
+                previousSource: previousSource,
+                currentSource: currentSource,
+                client: connection.client
+            )
+            guard decision != .restart else { return false }
+            try await upload(
+                localURL: localURL,
+                to: remotePath.rawValue,
+                transferID: transfer.id,
+                client: connection.client
+            )
+            return true
+        case .scpDownload:
+            let localURL = transfer.task.localURL
+            let remotePath = try SFTPRemotePath(rawValue: transfer.task.remotePath)
+            let currentSource = try await remoteTransferFingerprint(at: remotePath, client: connection.client)
+            guard currentSource == previousSource else { return false }
+            let existingBytes = try existingLocalFileSize(at: localURL)
+            let decision = try await verifiedResumeDecision(
+                localURL: localURL,
+                remotePath: remotePath,
+                existingDestinationBytes: existingBytes,
+                previousSource: previousSource,
+                currentSource: currentSource,
+                client: connection.client
+            )
+            guard decision != .restart else { return false }
+            try await download(
+                remotePath: remotePath.rawValue,
+                to: localURL,
+                transferID: transfer.id,
+                client: connection.client
+            )
+            return true
+        case .upload, .download:
+            return false
         }
     }
 
@@ -2507,6 +2604,22 @@ final class CoreWorkspaceService: AppWorkspaceService {
                 transfer.task.localURL = resolvedLocal
                 planned = try TransferPlanner.plan(transfer.task)
             }
+            let sourceBeforeTransfer: TransferSourceFingerprint?
+            if planned.isRecursive {
+                sourceBeforeTransfer = nil
+            } else {
+                switch planned.operation {
+                case .upload:
+                    sourceBeforeTransfer = try localTransferFingerprint(at: planned.localURL)
+                case .download:
+                    let connection = try await requireReadySFTP(sessionID: transfer.sessionID)
+                    sourceBeforeTransfer = try await remoteTransferFingerprint(
+                        at: planned.remotePath,
+                        client: connection.client
+                    )
+                }
+            }
+            transfer.task.sourceFingerprint = sourceBeforeTransfer
             emitSnapshot()
 
             let remoteOperand = "\(prepared.configuration.targetAlias):\(planned.remotePath.rawValue)"
@@ -2569,6 +2682,25 @@ final class CoreWorkspaceService: AppWorkspaceService {
                             korean: "SCP 전송에 실패했습니다: \(diagnostics)"
                         )
                 )
+            }
+            if let sourceBeforeTransfer {
+                let sourceAfterTransfer: TransferSourceFingerprint
+                switch planned.operation {
+                case .upload:
+                    sourceAfterTransfer = try localTransferFingerprint(at: planned.localURL)
+                case .download:
+                    let connection = try await requireReadySFTP(sessionID: transfer.sessionID)
+                    sourceAfterTransfer = try await remoteTransferFingerprint(
+                        at: planned.remotePath,
+                        client: connection.client
+                    )
+                }
+                guard sourceAfterTransfer == sourceBeforeTransfer else {
+                    throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                        "The source changed while SCP was transferring it. The retry will restart safely.",
+                        korean: "SCP 전송 중 원본이 변경되었습니다. 다시 시도하면 안전하게 처음부터 전송합니다."
+                    ))
+                }
             }
             if let total = transfer.task.totalBytes {
                 transfer.task = try TransferTaskStateMachine.apply(
@@ -2655,14 +2787,51 @@ final class CoreWorkspaceService: AppWorkspaceService {
         transferID: UUID,
         client: SFTPClient
     ) async throws {
+        do {
+            try await uploadItem(localURL: localURL, to: remotePath, transferID: transferID, client: client)
+        } catch TransferConflictOutcome.skipItem {
+            transfers[transferID]?.skippedItemCount += 1
+        }
+    }
+
+    private func uploadItem(
+        localURL: URL,
+        to remotePath: String,
+        transferID: UUID,
+        client: SFTPClient
+    ) async throws {
         try Task.checkCancellation()
         let values = try localURL.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         let destination = try SFTPRemotePath(rawValue: remotePath)
         if values.isSymbolicLink == true {
             let target = try FileManager.default.destinationOfSymbolicLink(atPath: localURL.path)
-            try await client.createSymbolicLink(at: destination, pointingTo: SFTPRemotePath(rawValue: target))
+            let resolved = try await resolvedRemoteDestination(destination, transferID: transferID, client: client)
+            do {
+                let existing = try await client.attributes(of: resolved, followSymlink: false)
+                guard !isRemoteDirectory(existing) else {
+                    throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                        "A folder cannot be overwritten by a symbolic link.",
+                        korean: "폴더를 심볼릭 링크로 덮어쓸 수 없습니다."
+                    ))
+                }
+                try await client.remove(resolved)
+            } catch let error as SFTPClientError {
+                guard case .remoteStatus(_, .noSuchFile, _) = error else { throw error }
+            }
+            try await client.createSymbolicLink(at: resolved, pointingTo: SFTPRemotePath(rawValue: target))
         } else if values.isDirectory == true {
-            try await ensureRemoteDirectory(destination, client: client)
+            guard let transfer = transfers[transferID] else { throw CoreWorkspaceServiceError.transferNotFound }
+            let key = try RecursiveTransferResumeKey.localFile(at: localURL)
+            let resolved: SFTPRemotePath
+            if transfer.task.retryCount > 0,
+               case let .remoteFile(saved)? = transfer.recursiveResumeLedger.directoryDestination(for: key) {
+                resolved = saved
+            } else {
+                resolved = try await resolvedRemoteDestination(destination, transferID: transferID, client: client)
+            }
+            try await ensureRemoteDirectory(resolved, client: client)
+            transfer.recursiveResumeLedger.recordDirectory(.remoteFile(resolved), for: key)
+            if localURL == transfer.task.localURL { transfer.task.remotePath = resolved.rawValue }
             let children = try FileManager.default.contentsOfDirectory(
                 at: localURL,
                 includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
@@ -2671,7 +2840,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             for child in children {
                 try await upload(
                     localURL: child,
-                    to: joinRemotePath(remotePath, child.lastPathComponent),
+                    to: joinRemotePath(resolved.rawValue, child.lastPathComponent),
                     transferID: transferID,
                     client: client
                 )
@@ -2693,50 +2862,75 @@ final class CoreWorkspaceService: AppWorkspaceService {
             && transfer.task.retryCount > 0
             && transfer.task.sourceFingerprint != nil
         let resolvedDestination: SFTPRemotePath
-        if isRetryingSingleFile {
+        let previousSource: TransferSourceFingerprint?
+        let shouldAttemptResume: Bool
+        if transfer.task.isRecursive {
+            let resumeKey = try RecursiveTransferResumeKey.localFile(at: localURL)
+            if transfer.task.retryCount > 0,
+               let checkpoint = transfer.recursiveResumeLedger.checkpoint(for: resumeKey) {
+                guard case let .remoteFile(savedDestination) = checkpoint.destination else {
+                    throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                        "The recursive upload checkpoint has an invalid destination.",
+                        korean: "재귀 업로드 재개 기록의 대상이 올바르지 않습니다."
+                    ))
+                }
+                resolvedDestination = savedDestination
+                previousSource = checkpoint.sourceFingerprint
+                shouldAttemptResume = true
+            } else {
+                resolvedDestination = try await resolvedRemoteDestination(destination, transferID: transferID, client: client)
+                previousSource = nil
+                shouldAttemptResume = false
+            }
+            transfer.recursiveResumeLedger.record(
+                RecursiveTransferResumeCheckpoint(
+                    sourceFingerprint: currentSource,
+                    destination: .remoteFile(resolvedDestination)
+                ),
+                for: resumeKey
+            )
+        } else if isRetryingSingleFile {
             resolvedDestination = destination
+            previousSource = transfer.task.sourceFingerprint
+            shouldAttemptResume = true
         } else {
             resolvedDestination = try await resolvedRemoteDestination(destination, transferID: transferID, client: client)
-            if !transfer.task.isRecursive {
-                transfer.task.remotePath = resolvedDestination.rawValue
-            }
+            transfer.task.remotePath = resolvedDestination.rawValue
+            previousSource = nil
+            shouldAttemptResume = false
         }
 
         let existingRemoteBytes = try await existingRemoteFileSize(
             at: resolvedDestination,
             client: client
         )
-        let prefixDigestMatches: Bool
-        if let previousSource = transfer.task.sourceFingerprint,
-           isRetryingSingleFile,
-           existingRemoteBytes > 0,
-           existingRemoteBytes < currentSource.size,
-           previousSource == currentSource {
-            prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
+        let resumeDecision: TransferResumeDecision
+        if shouldAttemptResume, let previousSource {
+            resumeDecision = try await verifiedResumeDecision(
                 localURL: localURL,
                 remotePath: resolvedDestination,
-                byteCount: existingRemoteBytes
-            )
-        } else {
-            prefixDigestMatches = false
-        }
-        let resumeOffset: Int64
-        if let previousSource = transfer.task.sourceFingerprint, isRetryingSingleFile {
-            switch TransferResumePlanner.decide(
                 existingDestinationBytes: existingRemoteBytes,
                 previousSource: previousSource,
                 currentSource: currentSource,
-                prefixDigestMatches: prefixDigestMatches
-            ) {
-            case let .resume(fromOffset):
-                resumeOffset = fromOffset
-            case .restart:
-                resumeOffset = 0
-            }
+                client: client
+            )
         } else {
+            resumeDecision = .restart
+        }
+        let resumeOffset: Int64
+        switch resumeDecision {
+        case let .resume(fromOffset):
+            resumeOffset = fromOffset
+        case .alreadyComplete:
+            try ensureLocalSourceIsUnchanged(currentSource, at: localURL)
+            reportRecoveredTransferProgress(transfer, transferID: transferID, bytes: currentSource.size)
+            return
+        case .restart:
             resumeOffset = 0
         }
-        transfer.task.sourceFingerprint = currentSource
+        if !transfer.task.isRecursive {
+            transfer.task.sourceFingerprint = currentSource
+        }
 
         let handle = try await client.open(
             path: resolvedDestination,
@@ -2755,7 +2949,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             var offset = UInt64(resumeOffset)
             if resumeOffset > 0 {
                 try await input.seek(to: offset)
-                updateTransferProgress(id: transferID, to: resumeOffset)
+                reportRecoveredTransferProgress(transfer, transferID: transferID, bytes: resumeOffset)
             }
             while true {
                 try Task.checkCancellation()
@@ -2767,6 +2961,14 @@ final class CoreWorkspaceService: AppWorkspaceService {
             }
             try await client.close(handle)
             await input.close()
+            try ensureLocalSourceIsUnchanged(currentSource, at: localURL)
+            let completedBytes = try await existingRemoteFileSize(at: resolvedDestination, client: client)
+            guard completedBytes == currentSource.size else {
+                throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                    "The remote upload size did not match the source after transfer.",
+                    korean: "업로드 후 원격 파일 크기가 원본과 일치하지 않습니다."
+                ))
+            }
         } catch {
             try? await client.close(handle)
             await input.close()
@@ -2780,16 +2982,52 @@ final class CoreWorkspaceService: AppWorkspaceService {
         transferID: UUID,
         client: SFTPClient
     ) async throws {
+        do {
+            try await downloadItem(remotePath: remotePath, to: localURL, transferID: transferID, client: client)
+        } catch TransferConflictOutcome.skipItem {
+            transfers[transferID]?.skippedItemCount += 1
+        }
+    }
+
+    private func downloadItem(
+        remotePath: String,
+        to localURL: URL,
+        transferID: UUID,
+        client: SFTPClient
+    ) async throws {
         try Task.checkCancellation()
         let source = try SFTPRemotePath(rawValue: remotePath)
         let attributes = try await client.attributes(of: source, followSymlink: false)
+        let isRecursiveTransferRoot = transfers[transferID]?.task.isRecursive == true
+            && remotePath == transfers[transferID]?.task.remotePath
         if isRemoteSymbolicLink(attributes) {
             let target = try await client.symbolicLinkTarget(at: source)
             let destination = try resolvedLocalDestination(localURL, isDirectory: false, transferID: transferID)
             try FileManager.default.createSymbolicLink(atPath: destination.path, withDestinationPath: target)
         } else if isRemoteDirectory(attributes) {
-            let destination = try resolvedLocalDestination(localURL, isDirectory: true, transferID: transferID)
+            guard let transfer = transfers[transferID] else { throw CoreWorkspaceServiceError.transferNotFound }
+            let key = RecursiveTransferResumeKey.remoteFile(at: source)
+            let destination: URL
+            if transfer.task.retryCount > 0,
+               case let .localFile(saved)? = transfer.recursiveResumeLedger.directoryDestination(for: key) {
+                destination = saved
+                if localItemExists(destination) {
+                    let values = try destination.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                    guard values.isDirectory == true, values.isSymbolicLink != true else {
+                        throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                            "The local folder changed before retry. Choose a new download destination.",
+                            korean: "재시도 전에 로컬 폴더가 변경되었습니다. 새 다운로드 대상을 선택하세요."
+                        ))
+                    }
+                }
+            } else {
+                destination = try resolvedLocalDestination(localURL, isDirectory: true, transferID: transferID)
+                if isRecursiveTransferRoot {
+                    transfers[transferID]?.task.localURL = destination
+                }
+            }
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            transfer.recursiveResumeLedger.recordDirectory(.localFile(destination), for: key)
             let entries = try await client.listDirectory(source)
             for entry in entries where entry.filename != "." && entry.filename != ".." {
                 try await download(
@@ -2816,46 +3054,71 @@ final class CoreWorkspaceService: AppWorkspaceService {
             && transfer.task.retryCount > 0
             && transfer.task.sourceFingerprint != nil
         let destination: URL
-        if isRetryingSingleFile {
+        let previousSource: TransferSourceFingerprint?
+        let shouldAttemptResume: Bool
+        if transfer.task.isRecursive {
+            let resumeKey = RecursiveTransferResumeKey.remoteFile(at: source)
+            if transfer.task.retryCount > 0,
+               let checkpoint = transfer.recursiveResumeLedger.checkpoint(for: resumeKey) {
+                guard case let .localFile(savedDestination) = checkpoint.destination else {
+                    throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                        "The recursive download checkpoint has an invalid destination.",
+                        korean: "재귀 다운로드 재개 기록의 대상이 올바르지 않습니다."
+                    ))
+                }
+                destination = savedDestination
+                previousSource = checkpoint.sourceFingerprint
+                shouldAttemptResume = true
+            } else {
+                destination = try resolvedLocalDestination(localURL, isDirectory: false, transferID: transferID)
+                previousSource = nil
+                shouldAttemptResume = false
+            }
+            transfer.recursiveResumeLedger.record(
+                RecursiveTransferResumeCheckpoint(
+                    sourceFingerprint: currentSource,
+                    destination: .localFile(destination)
+                ),
+                for: resumeKey
+            )
+        } else if isRetryingSingleFile {
             destination = localURL
+            previousSource = transfer.task.sourceFingerprint
+            shouldAttemptResume = true
         } else {
             destination = try resolvedLocalDestination(localURL, isDirectory: false, transferID: transferID)
-            if !transfer.task.isRecursive {
-                transfer.task.localURL = destination
-            }
+            transfer.task.localURL = destination
+            previousSource = nil
+            shouldAttemptResume = false
         }
         let existingLocalBytes = try existingLocalFileSize(at: destination)
-        let prefixDigestMatches: Bool
-        if let previousSource = transfer.task.sourceFingerprint,
-           isRetryingSingleFile,
-           existingLocalBytes > 0,
-           existingLocalBytes < currentSource.size,
-           previousSource == currentSource {
-            prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
+        let resumeDecision: TransferResumeDecision
+        if shouldAttemptResume, let previousSource {
+            resumeDecision = try await verifiedResumeDecision(
                 localURL: destination,
                 remotePath: source,
-                byteCount: existingLocalBytes
-            )
-        } else {
-            prefixDigestMatches = false
-        }
-        let resumeOffset: Int64
-        if let previousSource = transfer.task.sourceFingerprint, isRetryingSingleFile {
-            switch TransferResumePlanner.decide(
                 existingDestinationBytes: existingLocalBytes,
                 previousSource: previousSource,
                 currentSource: currentSource,
-                prefixDigestMatches: prefixDigestMatches
-            ) {
-            case let .resume(fromOffset):
-                resumeOffset = fromOffset
-            case .restart:
-                resumeOffset = 0
-            }
+                client: client
+            )
         } else {
+            resumeDecision = .restart
+        }
+        let resumeOffset: Int64
+        switch resumeDecision {
+        case let .resume(fromOffset):
+            resumeOffset = fromOffset
+        case .alreadyComplete:
+            try await ensureRemoteSourceIsUnchanged(currentSource, at: source, client: client)
+            reportRecoveredTransferProgress(transfer, transferID: transferID, bytes: currentSource.size)
+            return
+        case .restart:
             resumeOffset = 0
         }
-        transfer.task.sourceFingerprint = currentSource
+        if !transfer.task.isRecursive {
+            transfer.task.sourceFingerprint = currentSource
+        }
 
         let handle = try await client.open(path: source, flags: [.read])
         let manager = FileManager.default
@@ -2883,7 +3146,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             var offset = UInt64(resumeOffset)
             if resumeOffset > 0 {
                 try await output.seek(to: offset)
-                updateTransferProgress(id: transferID, to: resumeOffset)
+                reportRecoveredTransferProgress(transfer, transferID: transferID, bytes: resumeOffset)
             }
             while let chunk = try await client.read(from: handle, offset: offset, length: 64 * 1024) {
                 try Task.checkCancellation()
@@ -2893,6 +3156,14 @@ final class CoreWorkspaceService: AppWorkspaceService {
             }
             try await client.close(handle)
             await output.close()
+            try await ensureRemoteSourceIsUnchanged(currentSource, at: source, client: client)
+            let completedBytes = try existingLocalFileSize(at: destination)
+            guard completedBytes == currentSource.size else {
+                throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                    "The local download size did not match the source after transfer.",
+                    korean: "다운로드 후 로컬 파일 크기가 원본과 일치하지 않습니다."
+                ))
+            }
         } catch {
             try? await client.close(handle)
             await output.close()
@@ -2924,7 +3195,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             case .overwrite:
                 return requested
             case .skip:
-                throw CancellationError()
+                throw TransferConflictOutcome.skipItem
             case .rename:
                 var ordinal = 1
                 while true {
@@ -2949,20 +3220,32 @@ final class CoreWorkspaceService: AppWorkspaceService {
         }
     }
 
-    private func resolvedLocalDestination(_ url: URL, isDirectory _: Bool, transferID: UUID) throws -> URL {
+    private func resolvedLocalDestination(_ url: URL, isDirectory: Bool, transferID: UUID) throws -> URL {
         guard let task = transfers[transferID]?.task else { throw CoreWorkspaceServiceError.transferNotFound }
         let manager = FileManager.default
-        guard manager.fileExists(atPath: url.path) else {
+        guard localItemExists(url) else {
             try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             return url
         }
         switch task.conflictPolicy {
         case .overwrite:
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            if isDirectory, values.isDirectory == true, values.isSymbolicLink != true {
+                // Merge directory contents. Removing the directory here would
+                // delete unrelated local files before the transfer starts.
+                return url
+            }
+            guard values.isDirectory != true || values.isSymbolicLink == true else {
+                throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                    "A folder cannot be overwritten by a file. Choose a different name.",
+                    korean: "폴더를 파일로 덮어쓸 수 없습니다. 다른 이름을 선택하세요."
+                ))
+            }
             try manager.removeItem(at: url)
             try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             return url
         case .skip:
-            throw CancellationError()
+            throw TransferConflictOutcome.skipItem
         case .ask:
             throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
                 "Choose whether to overwrite, skip, or rename the existing local item before downloading.",
@@ -2972,13 +3255,20 @@ final class CoreWorkspaceService: AppWorkspaceService {
             var ordinal = 1
             while true {
                 let candidate = try TransferPlanner.suggestedRename(for: url, ordinal: ordinal)
-                if !manager.fileExists(atPath: candidate.path) {
+                if !localItemExists(candidate) {
                     try manager.createDirectory(at: candidate.deletingLastPathComponent(), withIntermediateDirectories: true)
                     return candidate
                 }
                 ordinal += 1
             }
         }
+    }
+
+    private func localItemExists(_ url: URL) -> Bool {
+        // fileExists follows symlinks and misses dangling links, which still
+        // occupy a filename and must participate in conflict resolution.
+        FileManager.default.fileExists(atPath: url.path)
+            || (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil
     }
 
     private func remoteRenameCandidate(_ path: String, ordinal: Int) -> String {
@@ -3101,6 +3391,73 @@ final class CoreWorkspaceService: AppWorkspaceService {
             ))
         }
         return Int64(size)
+    }
+
+    /// A resume decision is made only after the caller has compared source
+    /// metadata and the complete destination prefix. A matching full-size
+    /// prefix is also meaningful because it lets a retry keep a finished leaf.
+    private func verifiedResumeDecision(
+        localURL: URL,
+        remotePath: SFTPRemotePath,
+        existingDestinationBytes: Int64,
+        previousSource: TransferSourceFingerprint,
+        currentSource: TransferSourceFingerprint,
+        client: SFTPClient
+    ) async throws -> TransferResumeDecision {
+        guard existingDestinationBytes > 0,
+              existingDestinationBytes <= currentSource.size,
+              previousSource == currentSource
+        else {
+            return .restart
+        }
+        let prefixDigestMatches = try await SFTPResumeIntegrityVerifier(client: client).localAndRemotePrefixMatch(
+            localURL: localURL,
+            remotePath: remotePath,
+            byteCount: existingDestinationBytes
+        )
+        return TransferResumePlanner.decide(
+            existingDestinationBytes: existingDestinationBytes,
+            previousSource: previousSource,
+            currentSource: currentSource,
+            prefixDigestMatches: prefixDigestMatches
+        )
+    }
+
+    private func ensureLocalSourceIsUnchanged(
+        _ expected: TransferSourceFingerprint,
+        at localURL: URL
+    ) throws {
+        guard try localTransferFingerprint(at: localURL) == expected else {
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "The local source changed while it was being transferred. The retry will restart safely.",
+                korean: "전송 중 로컬 원본이 변경되었습니다. 다시 시도하면 안전하게 처음부터 전송합니다."
+            ))
+        }
+    }
+
+    private func ensureRemoteSourceIsUnchanged(
+        _ expected: TransferSourceFingerprint,
+        at remotePath: SFTPRemotePath,
+        client: SFTPClient
+    ) async throws {
+        guard try await remoteTransferFingerprint(at: remotePath, client: client) == expected else {
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "The remote source changed while it was being transferred. The retry will restart safely.",
+                korean: "전송 중 원격 원본이 변경되었습니다. 다시 시도하면 안전하게 처음부터 전송합니다."
+            ))
+        }
+    }
+
+    private func reportRecoveredTransferProgress(
+        _ transfer: ManagedTransfer,
+        transferID: UUID,
+        bytes: Int64
+    ) {
+        if transfer.task.isRecursive {
+            updateTransferProgress(id: transferID, by: bytes)
+        } else {
+            updateTransferProgress(id: transferID, to: bytes)
+        }
     }
 
     private func makeRemoteEditURL(for remotePath: SFTPRemotePath) throws -> URL {
