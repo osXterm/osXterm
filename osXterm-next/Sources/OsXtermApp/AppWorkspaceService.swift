@@ -49,7 +49,9 @@ protocol AppWorkspaceService: AnyObject {
     func saveFolder(id: UUID?, name: String) async throws
     func deleteFolder(id: UUID) async throws
 
-    func importSSHConfig(from url: URL) async throws
+    func previewSSHConfig(from url: URL) async throws -> SSHConfigImportPreviewPresentation
+    func importSSHConfig(previewID: UUID, profileIDs: Set<UUID>) async throws
+    func discardSSHConfigImportPreview(id: UUID) async
     func exportProfiles(ids: [UUID], to url: URL) async throws
 
     func enqueueUpload(urls: [URL], to sessionID: UUID, conflictPolicy: TransferConflictPolicy) async throws
@@ -113,7 +115,9 @@ extension AppWorkspaceService {
     func saveFolder(id _: UUID?, name _: String) async throws { throw AppWorkspaceServiceError.unsupported("folders") }
     func deleteFolder(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("folders") }
 
-    func importSSHConfig(from _: URL) async throws { throw AppWorkspaceServiceError.unsupported("SSH config import") }
+    func previewSSHConfig(from _: URL) async throws -> SSHConfigImportPreviewPresentation { throw AppWorkspaceServiceError.unsupported("SSH config import preview") }
+    func importSSHConfig(previewID _: UUID, profileIDs _: Set<UUID>) async throws { throw AppWorkspaceServiceError.unsupported("SSH config import") }
+    func discardSSHConfigImportPreview(id _: UUID) async {}
     func exportProfiles(ids _: [UUID], to _: URL) async throws { throw AppWorkspaceServiceError.unsupported("profile export") }
 
     func enqueueUpload(urls _: [URL], to _: UUID, conflictPolicy _: TransferConflictPolicy) async throws { throw AppWorkspaceServiceError.unsupported("uploads") }

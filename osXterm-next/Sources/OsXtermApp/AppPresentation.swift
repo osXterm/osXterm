@@ -34,6 +34,32 @@ struct FolderPresentation: Identifiable, Hashable {
     var profileIDs: [UUID]
 }
 
+/// A read-only OpenSSH config import result. It contains no credentials and
+/// stays in memory until the user chooses the profiles to persist.
+struct SSHConfigImportPreviewPresentation: Identifiable, Hashable {
+    let id: UUID
+    var sourcePath: String
+    var profiles: [SSHConfigImportedProfilePresentation]
+    var diagnostics: [SSHConfigImportDiagnosticPresentation]
+}
+
+struct SSHConfigImportedProfilePresentation: Identifiable, Hashable {
+    let id: UUID
+    var alias: String
+    var endpoint: String
+    var authenticationSummary: String
+    var jumpAliases: [String]
+    var unsupportedDirectives: [String]
+}
+
+struct SSHConfigImportDiagnosticPresentation: Identifiable, Hashable {
+    let id: UUID
+    var severity: String
+    var message: String
+    var sourcePath: String
+    var line: Int
+}
+
 enum SessionPresentationState: Equatable, Hashable {
     case idle
     case connecting

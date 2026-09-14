@@ -50,6 +50,17 @@ struct WorkspaceRootView: View {
                 onSave: model.saveTunnel
             )
         }
+        .sheet(item: $model.sshConfigImportPreview) { preview in
+            SSHConfigImportPreviewSheet(
+                preview: preview,
+                onImport: { selectedIDs in
+                    model.importSSHConfig(previewID: preview.id, profileIDs: selectedIDs)
+                },
+                onCancel: {
+                    model.discardSSHConfigImportPreview(id: preview.id)
+                }
+            )
+        }
         .sheet(isPresented: $model.isSettingsPresented) {
             SettingsView(model: model)
                 .frame(minWidth: 560, minHeight: 480)
@@ -207,7 +218,7 @@ struct WorkspaceRootView: View {
             korean: "OpenSSH 설정 파일을 선택하세요. 가져오기 중에는 Match exec 및 ProxyCommand를 실행하지 않습니다."
         )
         if panel.runModal() == .OK, let url = panel.url {
-            model.importSSHConfig(from: url)
+            model.previewSSHConfig(from: url)
         }
     }
 
@@ -221,6 +232,176 @@ struct WorkspaceRootView: View {
         )
         if panel.runModal() == .OK, let url = panel.url {
             model.exportProfiles(ids: model.snapshot.profiles.map(\.id), to: url)
+        }
+    }
+}
+
+private struct SSHConfigImportPreviewSheet: View {
+    let preview: SSHConfigImportPreviewPresentation
+    let onImport: (Set<UUID>) -> Void
+    let onCancel: () -> Void
+    @State private var selectedProfileIDs: Set<UUID>
+
+    init(
+        preview: SSHConfigImportPreviewPresentation,
+        onImport: @escaping (Set<UUID>) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.preview = preview
+        self.onImport = onImport
+        self.onCancel = onCancel
+        _selectedProfileIDs = State(initialValue: Set(preview.profiles.map(\.id)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(AppText.string("Review SSH Config Import", korean: "SSH 설정 가져오기 검토"))
+                    .font(.title3.weight(.semibold))
+                Text(AppText.string(
+                    "Review the profiles before saving. Match exec and ProxyCommand were not run.",
+                    korean: "저장하기 전에 프로필을 검토하세요. Match exec 및 ProxyCommand는 실행하지 않았습니다."
+                ))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                Text(AppText.string(
+                    "Keep every listed jump profile selected when importing a profile that uses it.",
+                    korean: "Jump host를 사용하는 프로필은 표시된 Jump host 프로필도 선택한 상태로 가져오세요."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Text(preview.sourcePath)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if preview.profiles.isEmpty {
+                        ContentUnavailableView(
+                            AppText.string("No importable profiles", korean: "가져올 수 있는 프로필 없음"),
+                            systemImage: "doc.text.magnifyingglass",
+                            description: Text(AppText.string(
+                                "The config did not contain a supported Host entry.",
+                                korean: "설정에 지원되는 Host 항목이 없습니다."
+                            ))
+                        )
+                    } else {
+                        ForEach(preview.profiles) { profile in
+                            Toggle(isOn: selectionBinding(for: profile.id)) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(profile.alias)
+                                        .font(.body.weight(.medium))
+                                    Text(profile.endpoint)
+                                        .font(.caption.monospaced())
+                                        .foregroundStyle(.secondary)
+                                    Text(profile.authenticationSummary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if !profile.jumpAliases.isEmpty {
+                                        Text(AppText.string(
+                                            "Jump: \(profile.jumpAliases.joined(separator: " → "))",
+                                            korean: "Jump: \(profile.jumpAliases.joined(separator: " → "))"
+                                        ))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    }
+                                    if !profile.unsupportedDirectives.isEmpty {
+                                        Text(AppText.string(
+                                            "Not imported: \(profile.unsupportedDirectives.joined(separator: ", "))",
+                                            korean: "가져오지 않음: \(profile.unsupportedDirectives.joined(separator: ", "))"
+                                        ))
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                    }
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                            .padding(10)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .accessibilityLabel(AppText.string(
+                                "Import \(profile.alias), \(profile.endpoint)",
+                                korean: "\(profile.alias), \(profile.endpoint) 가져오기"
+                            ))
+                        }
+                    }
+
+                    if !preview.diagnostics.isEmpty {
+                        Divider().padding(.vertical, 4)
+                        Text(AppText.string("Import Notes", korean: "가져오기 안내"))
+                            .font(.headline)
+                        ForEach(preview.diagnostics) { diagnostic in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: diagnosticSymbol(for: diagnostic.severity))
+                                    .foregroundStyle(diagnosticColor(for: diagnostic.severity))
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(diagnostic.message)
+                                        .font(.caption)
+                                    Text("\(diagnostic.sourcePath):\(diagnostic.line)")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(8)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Text(AppText.plural(
+                    "1 profile selected",
+                    englishPlural: "\(selectedProfileIDs.count) profiles selected",
+                    korean: "프로필 \(selectedProfileIDs.count)개 선택됨",
+                    count: selectedProfileIDs.count
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button(AppText.cancel, action: onCancel)
+                Button(AppText.string("Import Selected", korean: "선택 항목 가져오기")) {
+                    onImport(selectedProfileIDs)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selectedProfileIDs.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 560, idealWidth: 680, minHeight: 460, idealHeight: 600)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(AppText.string("SSH config import preview", korean: "SSH 설정 가져오기 미리보기"))
+    }
+
+    private func selectionBinding(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { selectedProfileIDs.contains(id) },
+            set: { isSelected in
+                if isSelected {
+                    selectedProfileIDs.insert(id)
+                } else {
+                    selectedProfileIDs.remove(id)
+                }
+            }
+        )
+    }
+
+    private func diagnosticSymbol(for severity: String) -> String {
+        switch severity {
+        case "error": "exclamationmark.triangle.fill"
+        case "warning": "exclamationmark.circle.fill"
+        default: "info.circle.fill"
+        }
+    }
+
+    private func diagnosticColor(for severity: String) -> Color {
+        switch severity {
+        case "error": .red
+        case "warning": .orange
+        default: .secondary
         }
     }
 }

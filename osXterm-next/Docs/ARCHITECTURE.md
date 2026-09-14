@@ -42,3 +42,5 @@ SCP forces SFTP transport mode. Its process is retained by the transfer queue so
 `CoreWorkspaceService` runs on the main actor for coherent presentation state while SFTP's actor and process I/O do their work outside the SwiftUI rendering path. A terminal is not marked connected just because a child process launched: OpenSSH output must show successful authentication or an interactive channel. A tunnel listener is tracked separately from a destination probe result.
 
 Workspace restoration restores descriptors and layout metadata. It never restarts commands or macros and never represents a terminated remote shell as recovered. Broadcast input is empty by default and targets only explicitly checked ready sessions.
+
+SSH config import first keeps a parsed preview in memory. The preview displays importable profiles, supported route details, unsupported directive names, and parser diagnostics. The app persists only profile IDs explicitly selected from that preview, and the parser never evaluates `Match exec` or `ProxyCommand`.

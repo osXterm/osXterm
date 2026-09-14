@@ -141,6 +141,30 @@ struct SSHConfigImportTests {
             _ = try importer.import(from: first)
         }
     }
+
+    @Test
+    func selectedImportRequiresEveryReferencedJumpProfile() throws {
+        let importer = SSHConfigImporter(sourceLoader: MemoryConfigLoader())
+        let result = try importer.import(text: """
+        Host jump
+            HostName jump.example
+            User relay
+        Host target
+            HostName target.example
+            User deploy
+            ProxyJump jump
+        """)
+        let jump = try #require(result.profiles.first(where: { $0.alias == "jump" }))
+        let target = try #require(result.profiles.first(where: { $0.alias == "target" }))
+
+        #expect(throws: SSHConfigImportSelectionError.missingJumpProfileReferences(Set([jump.id]))) {
+            _ = try result.connectionProfiles(selectedIDs: [target.id])
+        }
+
+        let selected = try result.connectionProfiles(selectedIDs: [jump.id, target.id])
+        let selectedTarget = try #require(selected.first(where: { $0.id == target.id }))
+        #expect(selectedTarget.jumpProfileIDs == [jump.id])
+    }
 }
 
 private struct MemoryConfigLoader: SSHConfigSourceLoading {

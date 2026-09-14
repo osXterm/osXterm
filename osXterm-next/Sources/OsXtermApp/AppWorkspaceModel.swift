@@ -17,6 +17,7 @@ final class AppWorkspaceModel: ObservableObject {
     @Published var isInspectorVisible = true
     @Published var profileEditorRequest: ProfileEditorRequest?
     @Published var tunnelEditorRequest: TunnelEditorRequest?
+    @Published var sshConfigImportPreview: SSHConfigImportPreviewPresentation?
     @Published var isSettingsPresented = false
     @Published var notice: AppNotice?
     @Published private(set) var unavailableReason: String?
@@ -172,9 +173,52 @@ final class AppWorkspaceModel: ObservableObject {
         }
     }
 
-    func importSSHConfig(from url: URL) {
-        perform(title: AppText.string("Could not import SSH config", korean: "SSH 설정을 가져올 수 없습니다")) { [service] in
-            try await service.importSSHConfig(from: url)
+    func previewSSHConfig(from url: URL) {
+        guard service.isAvailable else {
+            unavailableReason = service.unavailableReason ?? AppText.unavailable
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                self.sshConfigImportPreview = try await self.service.previewSSHConfig(from: url)
+            } catch {
+                self.present(
+                    error,
+                    title: AppText.string("Could not preview SSH config", korean: "SSH 설정을 미리볼 수 없습니다")
+                )
+            }
+        }
+    }
+
+    func importSSHConfig(previewID: UUID, profileIDs: Set<UUID>) {
+        guard service.isAvailable else {
+            unavailableReason = service.unavailableReason ?? AppText.unavailable
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.service.importSSHConfig(previewID: previewID, profileIDs: profileIDs)
+                if self.sshConfigImportPreview?.id == previewID {
+                    self.sshConfigImportPreview = nil
+                }
+                self.accept(try await self.service.loadSnapshot())
+            } catch {
+                self.present(
+                    error,
+                    title: AppText.string("Could not import SSH config", korean: "SSH 설정을 가져올 수 없습니다")
+                )
+            }
+        }
+    }
+
+    func discardSSHConfigImportPreview(id: UUID) {
+        if sshConfigImportPreview?.id == id {
+            sshConfigImportPreview = nil
+        }
+        Task { [service] in
+            await service.discardSSHConfigImportPreview(id: id)
         }
     }
 

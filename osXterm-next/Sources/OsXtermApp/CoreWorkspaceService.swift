@@ -262,6 +262,10 @@ private final class ManagedRemoteEdit {
     }
 }
 
+private struct PendingSSHConfigImport {
+    let result: SSHConfigImportResult
+}
+
 private struct RemoteEditSourceFingerprint: Equatable {
     var metadata: TransferSourceFingerprint
     var sha256: Data
@@ -377,6 +381,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
     private var challengeGates: [UUID: CredentialChallengeGate] = [:]
     private var changedHostKeyChallenges: [UUID: UUID] = [:]
     private var newHostKeyFallbackChallenges: [UUID: UUID] = [:]
+    private var pendingSSHConfigImports: [UUID: PendingSSHConfigImport] = [:]
     private var authenticationChallenge: AuthenticationChallengePresentation?
     private var snapshotHandler: (@MainActor (AppWorkspaceSnapshot) -> Void)?
 
@@ -655,14 +660,56 @@ final class CoreWorkspaceService: AppWorkspaceService {
         emitSnapshot()
     }
 
-    func importSSHConfig(from url: URL) async throws {
+    func previewSSHConfig(from url: URL) async throws -> SSHConfigImportPreviewPresentation {
         try await loadIfNeeded()
         let result = try SSHConfigImporter().import(from: url)
-        for profile in result.connectionProfiles() {
+        let preview = sshConfigImportPreview(result: result, sourceURL: url)
+        pendingSSHConfigImports[preview.id] = PendingSSHConfigImport(result: result)
+        return preview
+    }
+
+    func importSSHConfig(previewID: UUID, profileIDs: Set<UUID>) async throws {
+        try await loadIfNeeded()
+        guard let pending = pendingSSHConfigImports[previewID] else {
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "This SSH config preview is no longer available. Preview the file again.",
+                korean: "이 SSH 설정 미리보기를 더 이상 사용할 수 없습니다. 파일을 다시 미리보세요."
+            ))
+        }
+        let profiles: [ConnectionProfile]
+        do {
+            profiles = try pending.result.connectionProfiles(selectedIDs: profileIDs)
+        } catch SSHConfigImportSelectionError.emptySelection {
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "Select at least one profile to import.",
+                korean: "가져올 프로필을 하나 이상 선택하세요."
+            ))
+        } catch SSHConfigImportSelectionError.unknownProfileIDs {
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "The selected SSH config profiles changed. Preview the file again.",
+                korean: "선택한 SSH 설정 프로필이 변경되었습니다. 파일을 다시 미리보세요."
+            ))
+        } catch let SSHConfigImportSelectionError.missingJumpProfileReferences(ids) {
+            let names = pending.result.profiles
+                .filter { ids.contains($0.id) }
+                .map(\.alias)
+                .sorted()
+                .joined(separator: ", ")
+            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                "Select every referenced jump profile before importing: \(names).",
+                korean: "참조된 Jump host 프로필을 모두 선택하세요: \(names)."
+            ))
+        }
+        for profile in profiles {
             try await profileRepository.save(profile)
         }
+        pendingSSHConfigImports.removeValue(forKey: previewID)
         profileDocument = await profileRepository.snapshot()
         emitSnapshot()
+    }
+
+    func discardSSHConfigImportPreview(id: UUID) async {
+        pendingSSHConfigImports.removeValue(forKey: id)
     }
 
     func exportProfiles(ids: [UUID], to url: URL) async throws {
@@ -3335,6 +3382,43 @@ final class CoreWorkspaceService: AppWorkspaceService {
         case .cancelled: .cancelled
         case .failed: .failed(message ?? AppText.string("Transfer failed", korean: "전송 실패"))
         }
+    }
+
+    private func sshConfigImportPreview(
+        result: SSHConfigImportResult,
+        sourceURL: URL
+    ) -> SSHConfigImportPreviewPresentation {
+        SSHConfigImportPreviewPresentation(
+            id: UUID(),
+            sourcePath: sourceURL.path,
+            profiles: result.profiles.map { imported in
+                let authenticationSummary: String
+                if !imported.identityFiles.isEmpty {
+                    authenticationSummary = AppText.string("Private key", korean: "개인 키")
+                } else if imported.identityAgent != nil {
+                    authenticationSummary = AppText.string("SSH agent", korean: "SSH 에이전트")
+                } else {
+                    authenticationSummary = AppText.string("System SSH agent", korean: "시스템 SSH 에이전트")
+                }
+                return SSHConfigImportedProfilePresentation(
+                    id: imported.id,
+                    alias: imported.alias,
+                    endpoint: "\(imported.username)@\(imported.host):\(imported.port)",
+                    authenticationSummary: authenticationSummary,
+                    jumpAliases: imported.proxyJump,
+                    unsupportedDirectives: imported.unsupportedDirectives.map(\.keyword)
+                )
+            },
+            diagnostics: result.diagnostics.map { diagnostic in
+                SSHConfigImportDiagnosticPresentation(
+                    id: UUID(),
+                    severity: diagnostic.severity.rawValue,
+                    message: diagnostic.message,
+                    sourcePath: diagnostic.location.source?.path ?? sourceURL.path,
+                    line: diagnostic.location.line
+                )
+            }
+        )
     }
 
     private func settingsPresentation(from settings: AppSettings) -> AppSettingsPresentation {

@@ -52,6 +52,23 @@ public enum SSHConfigImportError: Error, Equatable, Sendable, LocalizedError {
     }
 }
 
+public enum SSHConfigImportSelectionError: Error, Equatable, Sendable, LocalizedError {
+    case emptySelection
+    case unknownProfileIDs(Set<UUID>)
+    case missingJumpProfileReferences(Set<UUID>)
+
+    public var errorDescription: String? {
+        switch self {
+        case .emptySelection:
+            "Select at least one SSH config profile to import."
+        case let .unknownProfileIDs(ids):
+            "The SSH config preview no longer contains selected profiles: \(ids.map(\.uuidString).sorted().joined(separator: ", "))."
+        case let .missingJumpProfileReferences(ids):
+            "Select every referenced jump profile before importing: \(ids.map(\.uuidString).sorted().joined(separator: ", "))."
+        }
+    }
+}
+
 /// Source access is injectable for preview and test flows. Implementations
 /// must only read text and expand patterns; they never execute configuration.
 public protocol SSHConfigSourceLoading: Sendable {
@@ -273,6 +290,30 @@ public struct SSHConfigImportResult: Equatable, Sendable {
             }
             return imported.connectionProfile(jumpProfileIDs: jumpIDs, date: date)
         }
+    }
+
+    /// Produces only the user-selected profiles while retaining a valid jump
+    /// chain. A target may not be imported with a dangling reference to a
+    /// jump profile that was shown in the same preview but left unselected.
+    public func connectionProfiles(
+        selectedIDs: Set<UUID>,
+        date: Date = .now
+    ) throws -> [ConnectionProfile] {
+        guard !selectedIDs.isEmpty else {
+            throw SSHConfigImportSelectionError.emptySelection
+        }
+        let allProfiles = connectionProfiles(date: date)
+        let allIDs = Set(allProfiles.map(\.id))
+        let unknownIDs = selectedIDs.subtracting(allIDs)
+        guard unknownIDs.isEmpty else {
+            throw SSHConfigImportSelectionError.unknownProfileIDs(unknownIDs)
+        }
+        let selectedProfiles = allProfiles.filter { selectedIDs.contains($0.id) }
+        let missingJumpIDs = Set(selectedProfiles.flatMap(\.jumpProfileIDs)).subtracting(selectedIDs)
+        guard missingJumpIDs.isEmpty else {
+            throw SSHConfigImportSelectionError.missingJumpProfileReferences(missingJumpIDs)
+        }
+        return selectedProfiles
     }
 
     private static func jumpLookupKey(_ value: String) -> String {

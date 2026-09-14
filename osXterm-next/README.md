@@ -13,7 +13,7 @@ The app uses SwiftUI and AppKit, SwiftTerm 1.19.0 for its PTY-backed terminal su
 - Structured SFTP v3 browsing and transfer operations. Directory listings do not parse `ls` output. Upload, download, recursive directory work, symlinks, permissions, selectable overwrite/skip/rename behavior, cancellation, and retry use the transfer queue. Single-file SFTP retries verify source metadata and the already transferred SHA-256 prefix before resuming a partial destination.
 - Remote regular files can open as app-managed local editing copies. Editor saves remain local until the user explicitly selects Save to Remote, which fails closed if the remote source changed.
 - SCP upload and download use the same generated route and credential policy as SFTP. osXterm forces SCP's SFTP transport mode and rejects unsafe legacy-SCP remote paths.
-- Profile editing, tags, favorites, search, recent connections, SSH config import preview, safe profile export, tunnel editing, editable snippets, Korean and English presentation strings, app icon, About view, licenses, and an ad-hoc packaging path.
+- Profile editing, tags, favorites, search, recent connections, SSH config import preview with explicit profile selection, safe profile export, tunnel editing, editable snippets, Korean and English presentation strings, app icon, About view, licenses, and an ad-hoc packaging path.
 
 The checked-in project contains `osXterm.xcodeproj` with a shared `osXterm` scheme. Its app and test targets delegate to the pinned Swift package so Xcode and command-line builds use the same source graph and packaging scripts.
 

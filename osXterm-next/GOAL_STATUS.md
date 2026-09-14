@@ -21,7 +21,7 @@ Not complete. The source implementation and verification harness are substantial
 | Tunnels | Implemented | Local, remote, dynamic, remote dynamic, Unix socket forwarding, process lifetime, verbose listener parsing, remote port allocation parsing, and menu-bar controls are present. |
 | Terminal workspace | Implemented | SwiftTerm PTY bridge, local shell, SSH sessions, tab close/rename/duplicate/reorder controls, two-pane layouts, OSC 52 preference, broadcast input, opt-in logs, and workspace persistence are present. |
 | SFTP and SCP | Implemented | SFTP v3 frames and transport, structured listing, recursive transfer, symlink and permission operations, selectable overwrite/skip/rename policy, single-file resume guarded by source metadata and a SHA-256 prefix comparison, explicit local-editor save-back, queue state, SFTP-backed SCP, and path validation are present. |
-| Profiles and import | Implemented | Profile editor, folder create/rename/delete, tags, favorites, search, recent connections, SSH config preview/import, export, and stored snippets with create/edit/delete plus one-run variable entry are present. |
+| Profiles and import | Implemented | Profile editor, folder create/rename/delete, tags, favorites, search, recent connections, SSH config preview with explicit profile selection and unsupported-directive diagnostics, export, and stored snippets with create/edit/delete plus one-run variable entry are present. |
 | Package and DMG scripts | Implemented | [Scripts/package-app.sh](Scripts/package-app.sh), [Scripts/create-dmg.sh](Scripts/create-dmg.sh), and [Scripts/verify-dmg.sh](Scripts/verify-dmg.sh) assemble and inspect an ad-hoc signed app and extracted DMG copy. |
 | Isolated integration harness | Implemented | [Integration/docker-compose.yml](Integration/docker-compose.yml) and `osXtermIntegrationRunner` cover direct, one-hop and two-hop routes, proxies, auth, 100 MiB resumable SFTP with source metadata and SHA-256 prefix plus final digest checks, SCP, tunnel data, collision, policy rejection, and package helpers. |
 
@@ -31,6 +31,7 @@ Not complete. The source implementation and verification harness are substantial
 - The same direct typecheck passed for all app sources with the fixed SwiftTerm module, plus AskPass, proxy helper, and integration runner source.
 - Swift test files passed parser validation.
 - A standalone arm64 smoke executable ran `SFTPResumeIntegrityVerifier` against a deterministic structured SFTP transport. It accepted matching prefix bytes and rejected changed prefix bytes.
+- A standalone arm64 smoke executable parsed an SSH config preview and confirmed that a target cannot be imported without its referenced jump profile.
 - `Package.resolved` resolved SwiftTerm 1.19.0 at the pinned revision.
 - `plutil -lint Packaging/Info.plist`, Xcode project plist syntax, icon-container inspection, all shell-script syntax, Compose YAML parsing, and proxy Python compilation passed.
 - `Scripts/prepare-integration-fixture.sh` ran successfully and its generated OpenSSH user certificate was inspected with `ssh-keygen -L`.
