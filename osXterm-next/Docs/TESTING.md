@@ -56,6 +56,7 @@ Do not record a release as passing from unit tests alone. A running SSH process 
 ## Current local evidence
 
 - Core, app, helper, and integration-runner source typechecks passed with the installed Xcode toolchain.
+- A standalone arm64 SwiftTerm terminal smoke executable fed a terminal buffer and verified next-match navigation, search clearing, case-sensitive matching, regular-expression matching, and whole-word matching through the public SwiftTerm API.
 - Swift test source syntax, shell script syntax, Compose YAML, Info.plist, icon container, and proxy Python syntax passed local static validation.
 - A manually linked Swift Testing runner executed all 53 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange, live loopback TCP and Unix socket destination probes, broadcast source, recipient routing, and disconnected-target pruning checks, installed OpenSSH capability checks, workspace persistence and version rejection, and session-log export content, replacement, cleanup, and mode-0600 assertions. This is supplemental evidence only; the supported `swift test` gate remains unverified.
 - The local `/usr/bin/ssh` reported `OpenSSH_10.3p1, LibreSSL 3.3.6` and passed the required ProxyJump, remote dynamic forwarding, Unix socket forwarding, and SFTP-backed SCP capability checks.
