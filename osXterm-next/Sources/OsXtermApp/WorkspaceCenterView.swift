@@ -270,6 +270,8 @@ private struct InactivePaneView: View {
 private struct TerminalPaneView: View {
     let session: TerminalSessionPresentation
     @ObservedObject var model: AppWorkspaceModel
+    @State private var nextFindSequence: UInt64 = 0
+    @State private var findRequest: TerminalFindPresentation?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -280,6 +282,7 @@ private struct TerminalPaneView: View {
                     sessionID: session.id,
                     launch: session.launch,
                     pendingInput: session.pendingInput,
+                    findRequest: findRequest,
                     fontName: model.snapshot.settings.terminalFontName,
                     fontSize: model.snapshot.settings.terminalFontSize,
                     lineSpacing: model.snapshot.settings.terminalLineSpacing,
@@ -324,6 +327,9 @@ private struct TerminalPaneView: View {
         }
         .background(Color(nsColor: .textBackgroundColor))
         .accessibilityElement(children: .contain)
+        .onChange(of: session.id) { _, _ in
+            findRequest = nil
+        }
     }
 
     private var terminalHeader: some View {
@@ -360,6 +366,17 @@ private struct TerminalPaneView: View {
                     .help(AppText.string("Session logging is enabled", korean: "세션 로그 기록이 켜져 있습니다"))
                     .accessibilityLabel(AppText.string("Session logging is enabled", korean: "세션 로그 기록이 켜져 있습니다"))
             }
+            Button {
+                showFindInterface()
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .help(AppText.string("Find in Terminal", korean: "터미널에서 찾기"))
+            .accessibilityLabel(AppText.string(
+                "Find in \(session.title) terminal",
+                korean: "\(session.title) 터미널에서 찾기"
+            ))
             Button {
                 chooseSessionLogExport()
             } label: {
@@ -432,6 +449,14 @@ private struct TerminalPaneView: View {
     private var isBroadcastParticipant: Bool {
         activeBroadcastParticipantCount >= 2
             && model.snapshot.broadcastTargetSessionIDs.contains(session.id)
+    }
+
+    private func showFindInterface() {
+        nextFindSequence &+= 1
+        if nextFindSequence == 0 {
+            nextFindSequence = 1
+        }
+        findRequest = TerminalFindPresentation(sequence: nextFindSequence)
     }
 
     private func chooseSessionLogExport() {

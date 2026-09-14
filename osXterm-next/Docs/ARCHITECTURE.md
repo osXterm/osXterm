@@ -48,7 +48,9 @@ Workspace restoration restores descriptors and layout metadata. It never restart
 and Hack from the SwiftPM resource bundle. The terminal adapter resolves the
 chosen bundled font rather than looking it up in the user's font collection.
 `TerminalTheme` offers 20 fixed ANSI palettes, with System dynamically
-following the current macOS appearance.
+following the current macOS appearance. The terminal header's Find control
+asks the adapter to invoke SwiftTerm's native Finder interface, so matching
+and navigation operate on the actual terminal buffer rather than a copied log.
 
 Session logging is disabled by default. When enabled, active and future terminal descriptors record to `Application Support/osXterm/Logs` with a mode-0700 directory and mode-0600 files. The visible export action first flushes the current file and then uses `SecureFileExporter` on a utility task to stage a private copy beside the user-selected destination before replacing that destination.
 

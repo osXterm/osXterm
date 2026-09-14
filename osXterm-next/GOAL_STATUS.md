@@ -1,6 +1,6 @@
 # osXterm-next Goal Status
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 ## Goal state
 
@@ -19,7 +19,7 @@ Not complete. The source implementation and verification harness are substantial
 | Authentication and host keys | Implemented | AskPass broker IPC, password, encrypted key, agent, certificate, keyboard-interactive handling, app `known_hosts`, first-key review, and changed-key replacement flow are present. |
 | Proxy and jump combinations | Implemented | HTTP CONNECT and SOCKS5 helper, proxy credential broker, ordered jump profiles, and common route configuration are present. |
 | Tunnels | Implemented | Local, remote, dynamic, remote dynamic, Unix socket forwarding, process lifetime, verbose listener parsing, remote port allocation parsing, menu-bar controls, and explicit destination checks are present. Local TCP and Unix probes connect through the created listener; remote forwarding checks its local destination separately. |
-| Terminal workspace | Implemented | SwiftTerm PTY bridge, local shell, SSH sessions, tab close/rename/duplicate/reorder controls, two-pane layouts, twenty ANSI color themes, four bundled open-license terminal fonts, persisted typography settings, OSC 52 preference, explicit ready-session broadcast input, opt-in logs that apply to active and future sessions, private session-log export, and workspace persistence are present. |
+| Terminal workspace | Implemented | SwiftTerm PTY bridge, local shell, SSH sessions, tab close/rename/duplicate/reorder controls, two-pane layouts, terminal-buffer search through SwiftTerm's native Finder interface, twenty ANSI color themes, four bundled open-license terminal fonts, persisted typography settings, OSC 52 preference, explicit ready-session broadcast input, opt-in logs that apply to active and future sessions, private session-log export, and workspace persistence are present. |
 | SFTP and SCP | Implemented | SFTP v3 frames and transport, structured listing, direct remote-path entry, recursive transfer, symlink and permission operations, selectable overwrite/skip/rename policy, single-file resume guarded by source metadata and a SHA-256 prefix comparison, explicit local-editor save-back, queue state, SFTP-backed SCP, and path validation are present. |
 | Profiles and import | Implemented | Profile editor, folder create/rename/delete, tags, favorites, search, recent connections, SSH config preview with explicit profile selection and unsupported-directive diagnostics, export, and stored snippets with create/edit/delete plus one-run variable entry are present. |
 | Package and DMG scripts | Implemented | [Scripts/package-app.sh](Scripts/package-app.sh), [Scripts/create-dmg.sh](Scripts/create-dmg.sh), and [Scripts/verify-dmg.sh](Scripts/verify-dmg.sh) assemble and inspect an ad-hoc signed app and extracted DMG copy. |

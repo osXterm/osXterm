@@ -16,6 +16,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
     var sessionID: UUID
     var launch: TerminalProcessLaunchPresentation?
     var pendingInput: TerminalInputPresentation?
+    var findRequest: TerminalFindPresentation?
     var fontName: String
     var fontSize: CGFloat
     var lineSpacing: CGFloat
@@ -40,6 +41,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
             sessionID: sessionID,
             launch: launch,
             pendingInput: pendingInput,
+            findRequest: findRequest,
             fontName: fontName,
             fontSize: fontSize,
             lineSpacing: lineSpacing,
@@ -61,6 +63,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
             sessionID: sessionID,
             launch: launch,
             pendingInput: pendingInput,
+            findRequest: findRequest,
             fontName: fontName,
             fontSize: fontSize,
             lineSpacing: lineSpacing,
@@ -85,6 +88,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
     private var activeLaunchID: UUID?
     private var appliedSessionID: UUID?
     private var lastPendingInputSequence: UInt64 = 0
+    private var lastFindRequestSequence: UInt64 = 0
     private var inputEnabled = false
     private var remoteClipboardEnabled = false
     private var appliedFontName = ""
@@ -134,6 +138,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
         sessionID: UUID,
         launch: TerminalProcessLaunchPresentation?,
         pendingInput: TerminalInputPresentation?,
+        findRequest: TerminalFindPresentation?,
         fontName: String,
         fontSize: CGFloat,
         lineSpacing: CGFloat,
@@ -145,6 +150,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
         if appliedSessionID != sessionID {
             appliedSessionID = sessionID
             lastPendingInputSequence = 0
+            lastFindRequestSequence = 0
         }
         self.sessionID = sessionID
         inputEnabled = isInputEnabled
@@ -186,6 +192,17 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
             process?.send(data: ArraySlice(pendingInput.data))
             lastPendingInputSequence = pendingInput.sequence
         }
+
+        if let findRequest, findRequest.sequence > lastFindRequestSequence {
+            lastFindRequestSequence = findRequest.sequence
+            showFindInterface()
+        }
+    }
+
+    private func showFindInterface() {
+        let item = NSMenuItem()
+        item.tag = NSTextFinder.Action.showFindInterface.rawValue
+        terminalView.performTextFinderAction(item)
     }
 
     private func launchProcessIfNeeded(_ launch: TerminalProcessLaunchPresentation) {
