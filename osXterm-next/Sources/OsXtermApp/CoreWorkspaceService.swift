@@ -1277,6 +1277,9 @@ final class CoreWorkspaceService: AppWorkspaceService {
         guard !commandText.isEmpty else { return }
         let input = Data((commandText + "\n").utf8)
         for sessionID in sessionIDs {
+            if let session = sessions[sessionID] {
+                appendTerminalInputLog(input, kind: "snippet input", to: session)
+            }
             enqueueTerminalInput(input, to: sessionID)
         }
         emitSnapshot()
@@ -1433,9 +1436,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         guard let session = sessions[sessionID], session.state.isInputReady else {
             throw CoreWorkspaceServiceError.sessionNotReady
         }
-        if session.descriptor.shouldLog {
-            appendSessionLog(Data("[input \(Date())] ".utf8) + data, to: session)
-        }
+        appendTerminalInputLog(data, kind: "input", to: session)
         let readySessionIDs = Set(sessions.compactMap { id, candidate in
             candidate.state.isInputReady ? id : nil
         })
@@ -1451,6 +1452,9 @@ final class CoreWorkspaceService: AppWorkspaceService {
             readySessionIDs: readySessionIDs
         )
         for targetID in recipients {
+            if let targetSession = sessions[targetID] {
+                appendTerminalInputLog(data, kind: "broadcast input", to: targetSession)
+            }
             enqueueTerminalInput(data, to: targetID)
         }
         if didPruneBroadcastTargets || !recipients.isEmpty {
@@ -3449,6 +3453,15 @@ final class CoreWorkspaceService: AppWorkspaceService {
             session.logFile?.closeFile()
             session.logFile = nil
         }
+    }
+
+    private func appendTerminalInputLog(
+        _ data: Data,
+        kind: String,
+        to session: ManagedTerminalSession
+    ) {
+        guard session.descriptor.shouldLog, !data.isEmpty else { return }
+        appendSessionLog(Data("[\(kind) \(Date())] ".utf8) + data, to: session)
     }
 
     private func sessionLogURL(for sessionID: UUID) -> URL {
