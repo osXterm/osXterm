@@ -47,6 +47,8 @@ private struct TransferInspector: View {
     @State private var deleteTarget: RemoteFilePresentation?
     @State private var showHiddenFiles = false
     @State private var transferConflictPolicy: TransferConflictPolicy = .rename
+    @State private var remotePathInput = ""
+    @FocusState private var isRemotePathFocused: Bool
 
     private var selectedSession: TerminalSessionPresentation? {
         model.selectedSession
@@ -75,6 +77,13 @@ private struct TransferInspector: View {
                 transferQueueSection
             }
             .padding(12)
+        }
+        .onAppear(perform: synchronizeRemotePathInput)
+        .onChange(of: model.snapshot.remoteDirectoryPath) { _, _ in
+            synchronizeRemotePathInput()
+        }
+        .onChange(of: selectedSession?.id) { _, _ in
+            synchronizeRemotePathInput()
         }
         .sheet(isPresented: $isNewFolderPresented) {
             RemoteFolderNameSheet(
@@ -180,6 +189,36 @@ private struct TransferInspector: View {
                 .menuStyle(.borderlessButton)
                 .accessibilityLabel(AppText.string("Remote file actions", korean: "원격 파일 작업"))
             }
+
+            HStack(spacing: 6) {
+                Image(systemName: "folder.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField(
+                    AppText.string("Remote Path", korean: "원격 경로"),
+                    text: $remotePathInput,
+                    prompt: Text(AppText.string("Remote path", korean: "원격 경로"))
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+                .focused($isRemotePathFocused)
+                .onSubmit(navigateToEnteredPath)
+                .accessibilityLabel(AppText.string("Remote path", korean: "원격 경로"))
+                .accessibilityHint(AppText.string(
+                    "Enter an SFTP directory path and press Return to open it.",
+                    korean: "SFTP 디렉터리 경로를 입력하고 Return을 눌러 여세요."
+                ))
+
+                Button(action: navigateToEnteredPath) {
+                    Image(systemName: "arrow.right.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(AppText.string("Open remote path", korean: "원격 경로 열기"))
+                .disabled(!isRemoteBrowserAvailable || !model.isServiceAvailable || remotePathInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(8)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .disabled(!isRemoteBrowserAvailable || !model.isServiceAvailable)
 
             if let path = model.snapshot.remoteDirectoryPath, !path.isEmpty {
                 HStack(spacing: 6) {
@@ -418,6 +457,27 @@ private struct TransferInspector: View {
         let parent = components.dropLast().joined(separator: "/")
         let parentPath = parent.isEmpty ? "/" : "/\(parent)"
         model.navigateRemoteDirectory(path: parentPath, sessionID: session.id)
+    }
+
+    private func navigateToEnteredPath() {
+        guard let session = selectedSession,
+              isRemoteBrowserAvailable,
+              model.isServiceAvailable
+        else {
+            return
+        }
+        let path = remotePathInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else {
+            synchronizeRemotePathInput()
+            return
+        }
+        model.navigateRemoteDirectory(path: path, sessionID: session.id)
+        isRemotePathFocused = false
+    }
+
+    private func synchronizeRemotePathInput() {
+        guard !isRemotePathFocused else { return }
+        remotePathInput = model.snapshot.remoteDirectoryPath ?? ""
     }
 }
 
