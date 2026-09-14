@@ -18,26 +18,35 @@ public actor WorkspaceRepository {
     public func snapshot() -> AppWorkspaceDocument { document }
 
     public func updateWorkspace(_ workspace: WorkspaceSnapshot) throws {
-        document.workspace = workspace
-        document.workspace.updatedAt = .now
-        try store.save(document)
+        var updated = document
+        updated.workspace = workspace
+        updated.workspace.updatedAt = .now
+        try commit(updated)
     }
 
     public func updateSettings(_ settings: AppSettings) throws {
-        document.settings = settings
-        try store.save(document)
+        var updated = document
+        updated.settings = settings
+        try commit(updated)
     }
 
     public func noteRecentProfile(_ profileID: UUID, maximumCount: Int = 32) throws {
-        document.recentProfileIDs.removeAll(where: { $0 == profileID })
-        document.recentProfileIDs.insert(profileID, at: 0)
-        document.recentProfileIDs = Array(document.recentProfileIDs.prefix(max(1, maximumCount)))
-        try store.save(document)
+        var updated = document
+        updated.recentProfileIDs.removeAll(where: { $0 == profileID })
+        updated.recentProfileIDs.insert(profileID, at: 0)
+        updated.recentProfileIDs = Array(updated.recentProfileIDs.prefix(max(1, maximumCount)))
+        try commit(updated)
     }
 
     public func replaceSnippets(_ snippets: [CommandSnippet]) throws {
-        document.snippets = snippets
-        try store.save(document)
+        var updated = document
+        updated.snippets = snippets
+        try commit(updated)
+    }
+
+    private func commit(_ updated: AppWorkspaceDocument) throws {
+        try store.save(updated)
+        document = updated
     }
 
     public static func defaultFileURL() -> URL {

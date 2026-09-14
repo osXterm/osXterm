@@ -71,6 +71,38 @@ struct WorkspaceRepositoryTests {
         }
     }
 
+    @Test
+    func failedSettingsSaveDoesNotBecomeALaterSuccessfulWorkspaceSave() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("storage", isDirectory: true)
+        let savedDirectory = root.appendingPathComponent("saved-storage", isDirectory: true)
+        let fileURL = directory.appendingPathComponent("workspace.json")
+        let repository = try WorkspaceRepository(fileURL: fileURL)
+        var committedSettings = AppSettings()
+        committedSettings.terminalThemeName = "Nord"
+        try await repository.updateSettings(committedSettings)
+
+        try FileManager.default.moveItem(at: directory, to: savedDirectory)
+        try Data("write blocked".utf8).write(to: directory)
+        var unsavedSettings = committedSettings
+        unsavedSettings.terminalThemeName = "Dracula"
+        await #expect(throws: AtomicJSONStoreError.self) {
+            try await repository.updateSettings(unsavedSettings)
+        }
+        #expect(await repository.snapshot().settings == committedSettings)
+
+        try FileManager.default.removeItem(at: directory)
+        try FileManager.default.moveItem(at: savedDirectory, to: directory)
+        // A later successful operation must not persist the rejected edit.
+        let recentProfileID = UUID()
+        try await repository.noteRecentProfile(recentProfileID)
+        let reopened = try WorkspaceRepository(fileURL: fileURL)
+        let restored = await reopened.snapshot()
+        #expect(restored.settings == committedSettings)
+        #expect(restored.recentProfileIDs == [recentProfileID])
+    }
+
     private func temporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

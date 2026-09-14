@@ -43,11 +43,12 @@ public struct AtomicJSONStore<Document: Codable & Sendable>: Sendable {
 
         let data = try encoder.encode(document)
         let stagingURL = directory.appendingPathComponent(".\(fileURL.lastPathComponent).\(UUID().uuidString).tmp")
+        defer { try? manager.removeItem(at: stagingURL) }
         try data.write(to: stagingURL, options: [.atomic])
         try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stagingURL.path)
 
         if manager.fileExists(atPath: fileURL.path) {
-            _ = try manager.replaceItemAt(fileURL, withItemAt: stagingURL)
+            _ = try manager.replaceItemAt(fileURL, withItemAt: stagingURL, options: .usingNewMetadataOnly)
         } else {
             try manager.moveItem(at: stagingURL, to: fileURL)
         }

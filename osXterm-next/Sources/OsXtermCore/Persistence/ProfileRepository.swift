@@ -1,5 +1,16 @@
 import Foundation
 
+public enum ProfileRepositoryError: Error, Equatable, LocalizedError, Sendable {
+    case profileUsedAsJumpHost(dependentProfileNames: [String])
+
+    public var errorDescription: String? {
+        switch self {
+        case let .profileUsedAsJumpHost(names):
+            "This profile is used as a jump host by: \(names.joined(separator: ", ")). Edit those routes before deleting it."
+        }
+    }
+}
+
 public actor ProfileRepository {
     public static let applicationName = "osXterm"
 
@@ -24,41 +35,54 @@ public actor ProfileRepository {
     }
 
     public func save(_ profile: ConnectionProfile) throws {
+        var updated = document
         var value = profile
         value.updatedAt = .now
-        if let index = document.profiles.firstIndex(where: { $0.id == value.id }) {
-            document.profiles[index] = value
+        if let index = updated.profiles.firstIndex(where: { $0.id == value.id }) {
+            updated.profiles[index] = value
         } else {
-            document.profiles.append(value)
+            updated.profiles.append(value)
         }
-        try store.save(document)
+        try commit(updated)
     }
 
     public func deleteProfile(id: UUID) throws {
-        document.profiles.removeAll(where: { $0.id == id })
-        for index in document.profiles.indices {
-            document.profiles[index].jumpProfileIDs.removeAll(where: { $0 == id })
-            document.profiles[index].updatedAt = .now
+        let dependents = document.profiles.filter { $0.id != id && $0.jumpProfileIDs.contains(id) }
+        guard dependents.isEmpty else {
+            // Removing the reference would silently change the next SSH,
+            // SFTP, SCP or tunnel connection to a shorter, unintended route.
+            throw ProfileRepositoryError.profileUsedAsJumpHost(
+                dependentProfileNames: dependents.map(\.name).sorted()
+            )
         }
-        try store.save(document)
+        var updated = document
+        updated.profiles.removeAll(where: { $0.id == id })
+        try commit(updated)
     }
 
     public func saveFolder(_ folder: ConnectionFolder) throws {
-        if let index = document.folders.firstIndex(where: { $0.id == folder.id }) {
-            document.folders[index] = folder
+        var updated = document
+        if let index = updated.folders.firstIndex(where: { $0.id == folder.id }) {
+            updated.folders[index] = folder
         } else {
-            document.folders.append(folder)
+            updated.folders.append(folder)
         }
-        try store.save(document)
+        try commit(updated)
     }
 
     public func deleteFolder(id: UUID) throws {
-        document.folders.removeAll(where: { $0.id == id })
-        for index in document.profiles.indices where document.profiles[index].folderID == id {
-            document.profiles[index].folderID = nil
-            document.profiles[index].updatedAt = .now
+        var updated = document
+        updated.folders.removeAll(where: { $0.id == id })
+        for index in updated.profiles.indices where updated.profiles[index].folderID == id {
+            updated.profiles[index].folderID = nil
+            updated.profiles[index].updatedAt = .now
         }
-        try store.save(document)
+        try commit(updated)
+    }
+
+    private func commit(_ updated: ProfileDocument) throws {
+        try store.save(updated)
+        document = updated
     }
 
     public static func defaultFileURL() -> URL {
