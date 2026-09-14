@@ -1045,6 +1045,32 @@ private struct ConnectionInspector: View {
                     text: AppText.string("No connected sessions can receive broadcast input.", korean: "동시 입력을 받을 수 있는 연결된 세션이 없습니다.")
                 )
             } else {
+                let eligibleSessionIDs = Set(eligibleSessions.map(\.id))
+                let activeTargetIDs = eligibleSessionIDs
+                    .intersection(model.snapshot.broadcastTargetSessionIDs)
+                let activeTargetCount = activeTargetIDs.count
+
+                if eligibleSessions.count >= 2 {
+                    HStack(spacing: 8) {
+                        Button(AppText.string("Select All Connected", korean: "연결된 세션 모두 선택")) {
+                            model.setBroadcastTargets(eligibleSessionIDs)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!model.isServiceAvailable || activeTargetIDs == eligibleSessionIDs)
+                        .accessibilityLabel(AppText.string(
+                            "Select all connected sessions for broadcast input",
+                            korean: "연결된 모든 세션에 동시 입력 선택"
+                        ))
+
+                        Button(AppText.string("Turn Off", korean: "끄기")) {
+                            model.setBroadcastTargets([])
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!model.isServiceAvailable || activeTargetIDs.isEmpty)
+                        .accessibilityLabel(AppText.string("Turn off broadcast input", korean: "동시 입력 끄기"))
+                    }
+                }
+
                 ForEach(eligibleSessions) { session in
                     Toggle(isOn: broadcastBinding(for: session.id)) {
                         Text(session.title).lineLimit(1)
@@ -1053,28 +1079,16 @@ private struct ConnectionInspector: View {
                     .disabled(!model.isServiceAvailable)
                     .accessibilityLabel(AppText.string("Broadcast to \(session.title)", korean: "\(session.title)에 동시 입력"))
                 }
-                let activeTargetCount = Set(eligibleSessions.map(\.id))
-                    .intersection(model.snapshot.broadcastTargetSessionIDs)
-                    .count
                 if activeTargetCount >= 2 {
-                    HStack {
-                        Label(
-                            AppText.string(
-                                "Broadcasting across \(activeTargetCount) sessions",
-                                korean: "\(activeTargetCount)개 세션에 동시 입력 중"
-                            ),
-                            systemImage: "dot.radiowaves.left.and.right"
-                        )
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
-                        Spacer()
-                        Button(AppText.string("Turn Off", korean: "끄기")) {
-                            model.setBroadcastTargets([])
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(!model.isServiceAvailable)
-                        .accessibilityLabel(AppText.string("Turn off broadcast input", korean: "동시 입력 끄기"))
-                    }
+                    Label(
+                        AppText.string(
+                            "Broadcasting across \(activeTargetCount) sessions",
+                            korean: "\(activeTargetCount)개 세션에 동시 입력 중"
+                        ),
+                        systemImage: "dot.radiowaves.left.and.right"
+                    )
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.orange)
                 } else if activeTargetCount == 1 {
                     Text(AppText.string(
                         "Select one more session before broadcast becomes active.",
