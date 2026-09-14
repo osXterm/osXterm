@@ -161,6 +161,7 @@ private struct SessionTabStrip: View {
             .padding(.vertical, 6)
         }
         .background(.bar)
+        .osXtermGlassSurface()
         .accessibilityLabel(AppText.string("Open terminal sessions", korean: "열린 터미널 세션"))
     }
 
@@ -425,6 +426,7 @@ private struct TerminalPaneView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+        .osXtermGlassSurface()
     }
 
     private var headerSubtitle: String {

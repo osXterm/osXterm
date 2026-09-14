@@ -51,6 +51,10 @@ chosen bundled font rather than looking it up in the user's font collection.
 following the current macOS appearance. The terminal header's Find control
 asks the adapter to invoke SwiftTerm's native Finder interface, so matching
 and navigation operate on the actual terminal buffer rather than a copied log.
+The terminal tab strip and pane header use macOS 26's glass material only for
+navigation and control surfaces. `accessibilityReduceTransparency` keeps their
+standard bar backgrounds, while inspector transitions honor
+`accessibilityReduceMotion`.
 
 Session logging is disabled by default. When enabled, active and future terminal descriptors record to `Application Support/osXterm/Logs` with a mode-0700 directory and mode-0600 files. The visible export action first flushes the current file and then uses `SecureFileExporter` on a utility task to stage a private copy beside the user-selected destination before replacing that destination.
 

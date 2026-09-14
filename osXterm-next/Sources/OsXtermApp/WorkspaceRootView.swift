@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct WorkspaceRootView: View {
     @ObservedObject var model: AppWorkspaceModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var authenticationResponse = ""
 
@@ -23,7 +24,7 @@ struct WorkspaceRootView: View {
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .animation(.default, value: model.isInspectorVisible)
+            .animation(reduceMotion ? nil : .default, value: model.isInspectorVisible)
             .overlay(alignment: .top) {
                 if let unavailableReason = model.unavailableReason {
                     ServiceUnavailableBanner(message: unavailableReason, onRetry: model.refresh)
