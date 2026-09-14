@@ -5,14 +5,11 @@ import Foundation
 /// Registers the terminal typefaces carried in the app resource bundle.
 /// Persisted font values are PostScript names rather than macOS font-family
 /// names, so terminal rendering does not depend on the user's installed fonts.
+@MainActor
 enum BundledTerminalFontRegistry {
-    private static let lock = NSLock()
     private static var didRegister = false
 
     static func registerBundledFonts() {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard !didRegister else { return }
         defer { didRegister = true }
 

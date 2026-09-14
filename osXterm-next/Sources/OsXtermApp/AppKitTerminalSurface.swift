@@ -78,7 +78,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
     }
 }
 
-final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalProcessDelegate {
+final class SwiftTermTerminalContainerView: NSView, @MainActor TerminalViewDelegate, @MainActor LocalProcessDelegate {
     var onInput: ((Data) -> Void)?
     var onResize: ((Int, Int) -> Void)?
     var onProcessStarted: ((UUID) -> Void)?
