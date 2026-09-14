@@ -19,6 +19,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
     var fontName: String
     var fontSize: CGFloat
     var lineSpacing: CGFloat
+    var themeName: String
     var isInputEnabled: Bool
     var allowsRemoteClipboard: Bool
     var accessibilityLabel: String
@@ -42,6 +43,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
             fontName: fontName,
             fontSize: fontSize,
             lineSpacing: lineSpacing,
+            themeName: themeName,
             isInputEnabled: isInputEnabled,
             allowsRemoteClipboard: allowsRemoteClipboard,
             accessibilityLabel: accessibilityLabel
@@ -62,6 +64,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
             fontName: fontName,
             fontSize: fontSize,
             lineSpacing: lineSpacing,
+            themeName: themeName,
             isInputEnabled: isInputEnabled,
             allowsRemoteClipboard: allowsRemoteClipboard,
             accessibilityLabel: accessibilityLabel
@@ -87,6 +90,8 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
     private var appliedFontName = ""
     private var appliedFontSize: CGFloat = 0
     private var appliedLineSpacing: CGFloat = 0
+    private var requestedThemeName = TerminalTheme.system.rawValue
+    private var appliedThemeCacheKey = ""
 
     override init(frame frameRect: NSRect) {
         terminalView = TerminalView(
@@ -120,6 +125,11 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
         process?.terminate()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyTerminalTheme(named: requestedThemeName, force: true)
+    }
+
     func apply(
         sessionID: UUID,
         launch: TerminalProcessLaunchPresentation?,
@@ -127,6 +137,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
         fontName: String,
         fontSize: CGFloat,
         lineSpacing: CGFloat,
+        themeName: String,
         isInputEnabled: Bool,
         allowsRemoteClipboard: Bool,
         accessibilityLabel: String
@@ -156,6 +167,8 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
             terminalView.lineSpacing = normalizedSpacing
             appliedLineSpacing = normalizedSpacing
         }
+        requestedThemeName = themeName
+        applyTerminalTheme(named: themeName, force: false)
 
         if let launch {
             launchProcessIfNeeded(launch)
@@ -190,6 +203,23 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
         if newProcess.running {
             onProcessStarted?(launch.launchID)
         }
+    }
+
+    private func applyTerminalTheme(named persistedName: String, force: Bool) {
+        let style = TerminalThemeVisualStyle.resolve(
+            TerminalTheme(persistedName: persistedName),
+            appearance: effectiveAppearance
+        )
+        guard force || appliedThemeCacheKey != style.cacheKey else { return }
+
+        terminalView.nativeForegroundColor = style.foreground
+        terminalView.nativeBackgroundColor = style.background
+        terminalView.selectedTextForegroundColor = style.selectionForeground
+        terminalView.selectedTextBackgroundColor = style.selectionBackground
+        terminalView.caretColor = style.caret
+        terminalView.caretTextColor = style.caretText
+        terminalView.installColors(style.ansiColors)
+        appliedThemeCacheKey = style.cacheKey
     }
 
     // MARK: TerminalViewDelegate
@@ -276,5 +306,128 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
             ws_xpixel: UInt16(clamping: width),
             ws_ypixel: UInt16(clamping: height)
         )
+    }
+}
+
+private struct TerminalThemeVisualStyle {
+    let cacheKey: String
+    let foreground: NSColor
+    let background: NSColor
+    let selectionForeground: NSColor
+    let selectionBackground: NSColor
+    let caret: NSColor
+    let caretText: NSColor
+    let ansiColors: [SwiftTerm.Color]
+
+    static func resolve(_ theme: TerminalTheme, appearance: NSAppearance) -> TerminalThemeVisualStyle {
+        switch theme {
+        case .system:
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let foreground = NSColor.textColor
+            let background = NSColor.textBackgroundColor
+            return TerminalThemeVisualStyle(
+                cacheKey: "system-\(isDark ? "dark" : "light")",
+                foreground: foreground,
+                background: background,
+                selectionForeground: NSColor.selectedTextColor,
+                selectionBackground: NSColor.selectedTextBackgroundColor,
+                caret: foreground,
+                caretText: background,
+                ansiColors: palette([
+                    0x000000, 0xc23621, 0x25bc24, 0xadad27,
+                    0x492ee1, 0xd338d3, 0x33bbc8, 0xcbcccd,
+                    0x818383, 0xfc391f, 0x31e722, 0xeaec23,
+                    0x5833ff, 0xf935f8, 0x14f0f0, 0xe9ebeb
+                ])
+            )
+
+        case .midnight:
+            return makeStyle(
+                cacheKey: "midnight",
+                foreground: 0xd8dee9,
+                background: 0x101722,
+                selectionForeground: 0xf8fafc,
+                selectionBackground: 0x345070,
+                caret: 0x88c0d0,
+                ansi: [
+                    0x1d2737, 0xbf616a, 0xa3be8c, 0xebcb8b,
+                    0x81a1c1, 0xb48ead, 0x88c0d0, 0xe5e9f0,
+                    0x4c566a, 0xd56b76, 0xb5d58e, 0xf0d399,
+                    0x8fbcbb, 0xc79bcf, 0x8fdee8, 0xffffff
+                ]
+            )
+
+        case .solarizedDark:
+            return makeStyle(
+                cacheKey: "solarized-dark",
+                foreground: 0x839496,
+                background: 0x002b36,
+                selectionForeground: 0xfdf6e3,
+                selectionBackground: 0x265b67,
+                caret: 0x2aa198,
+                ansi: [
+                    0x073642, 0xdc322f, 0x859900, 0xb58900,
+                    0x268bd2, 0xd33682, 0x2aa198, 0xeee8d5,
+                    0x002b36, 0xcb4b16, 0x586e75, 0x657b83,
+                    0x839496, 0x6c71c4, 0x93a1a1, 0xfdf6e3
+                ]
+            )
+
+        case .solarizedLight:
+            return makeStyle(
+                cacheKey: "solarized-light",
+                foreground: 0x657b83,
+                background: 0xfdf6e3,
+                selectionForeground: 0xfdf6e3,
+                selectionBackground: 0x2aa198,
+                caret: 0x268bd2,
+                ansi: [
+                    0x073642, 0xdc322f, 0x859900, 0xb58900,
+                    0x268bd2, 0xd33682, 0x2aa198, 0xeee8d5,
+                    0x002b36, 0xcb4b16, 0x586e75, 0x657b83,
+                    0x839496, 0x6c71c4, 0x93a1a1, 0xfdf6e3
+                ]
+            )
+        }
+    }
+
+    private static func makeStyle(
+        cacheKey: String,
+        foreground: UInt32,
+        background: UInt32,
+        selectionForeground: UInt32,
+        selectionBackground: UInt32,
+        caret: UInt32,
+        ansi: [UInt32]
+    ) -> TerminalThemeVisualStyle {
+        TerminalThemeVisualStyle(
+            cacheKey: cacheKey,
+            foreground: color(foreground),
+            background: color(background),
+            selectionForeground: color(selectionForeground),
+            selectionBackground: color(selectionBackground),
+            caret: color(caret),
+            caretText: color(background),
+            ansiColors: palette(ansi)
+        )
+    }
+
+    private static func color(_ rgb: UInt32) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((rgb >> 16) & 0xff) / 255,
+            green: CGFloat((rgb >> 8) & 0xff) / 255,
+            blue: CGFloat(rgb & 0xff) / 255,
+            alpha: 1
+        )
+    }
+
+    private static func palette(_ colors: [UInt32]) -> [SwiftTerm.Color] {
+        colors.map { color in
+            SwiftTerm.Color(
+                red8: UInt16((color >> 16) & 0xff),
+                green8: UInt16((color >> 8) & 0xff),
+                blue8: UInt16(color & 0xff)
+            )
+        }
     }
 }

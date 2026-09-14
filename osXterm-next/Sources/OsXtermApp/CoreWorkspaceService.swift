@@ -3452,7 +3452,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             terminalFontName: presentation.terminalFontName,
             terminalFontSize: presentation.terminalFontSize,
             terminalLineSpacing: presentation.terminalLineSpacing,
-            terminalThemeName: presentation.terminalThemeName,
+            terminalThemeName: TerminalTheme(persistedName: presentation.terminalThemeName).rawValue,
             allowRemoteClipboard: presentation.allowRemoteClipboard,
             keepTunnelsRunningWhenWindowCloses: presentation.keepTunnelsRunningWhenWindowCloses,
             sessionLoggingEnabled: presentation.sessionLoggingEnabled

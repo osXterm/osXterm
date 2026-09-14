@@ -102,9 +102,18 @@ struct SettingsView: View {
             }
 
             Section(AppText.string("Theme and Logging", korean: "테마 및 로그")) {
-                TextField(AppText.string("Theme", korean: "테마"), text: $draft.terminalThemeName)
-                    .textFieldStyle(.roundedBorder)
+                Picker(AppText.string("Theme", korean: "테마"), selection: terminalTheme) {
+                    ForEach(TerminalTheme.allCases) { theme in
+                        Text(theme.displayName).tag(theme)
+                    }
+                }
                     .accessibilityLabel(AppText.string("Terminal theme", korean: "터미널 테마"))
+                Text(AppText.string(
+                    "System follows the current macOS appearance. The other themes include their own ANSI palette.",
+                    korean: "시스템은 현재 macOS 모양을 따릅니다. 나머지 테마에는 전용 ANSI 팔레트가 포함됩니다."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 Toggle(AppText.string("Record session logs", korean: "세션 로그 기록"), isOn: $draft.sessionLoggingEnabled)
                 Text(AppText.string(
                     "Logs are opt-in. Review the selected log location before exporting or sharing them.",
@@ -144,5 +153,12 @@ struct SettingsView: View {
         !draft.terminalFontName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (9 ... 28).contains(draft.terminalFontSize)
             && (1 ... 1.6).contains(draft.terminalLineSpacing)
+    }
+
+    private var terminalTheme: Binding<TerminalTheme> {
+        Binding(
+            get: { TerminalTheme(persistedName: draft.terminalThemeName) },
+            set: { draft.terminalThemeName = $0.rawValue }
+        )
     }
 }

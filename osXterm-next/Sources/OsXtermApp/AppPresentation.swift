@@ -342,6 +342,44 @@ struct AppSettingsPresentation: Equatable {
     )
 }
 
+/// The terminal color themes that osXterm can render directly through the
+/// SwiftTerm adapter. The persisted setting remains a string so existing
+/// workspace documents can be read without a schema migration.
+enum TerminalTheme: String, CaseIterable, Identifiable {
+    case system = "System"
+    case midnight = "Midnight"
+    case solarizedDark = "Solarized Dark"
+    case solarizedLight = "Solarized Light"
+
+    var id: String { rawValue }
+
+    init(persistedName: String) {
+        switch persistedName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "midnight":
+            self = .midnight
+        case "solarized dark", "solarized-dark", "solarizeddark":
+            self = .solarizedDark
+        case "solarized light", "solarized-light", "solarizedlight":
+            self = .solarizedLight
+        default:
+            self = .system
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .system:
+            AppText.string("System", korean: "시스템")
+        case .midnight:
+            AppText.string("Midnight", korean: "미드나이트")
+        case .solarizedDark:
+            AppText.string("Solarized Dark", korean: "Solarized 다크")
+        case .solarizedLight:
+            AppText.string("Solarized Light", korean: "Solarized 라이트")
+        }
+    }
+}
+
 struct AppWorkspaceSnapshot: Equatable {
     var profiles: [ProfilePresentation]
     var folders: [FolderPresentation]

@@ -281,6 +281,7 @@ private struct TerminalPaneView: View {
                     fontName: model.snapshot.settings.terminalFontName,
                     fontSize: model.snapshot.settings.terminalFontSize,
                     lineSpacing: model.snapshot.settings.terminalLineSpacing,
+                    themeName: model.snapshot.settings.terminalThemeName,
                     isInputEnabled: session.state.isInputReady && !session.isReadOnly && model.isServiceAvailable,
                     allowsRemoteClipboard: model.snapshot.settings.allowRemoteClipboard,
                     accessibilityLabel: AppText.string(
