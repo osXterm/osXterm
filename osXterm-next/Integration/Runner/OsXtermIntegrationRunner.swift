@@ -19,11 +19,27 @@ enum IntegrationRunnerError: LocalizedError {
 struct OsXtermIntegrationRunner {
     static func main() async {
         do {
+            if CommandLine.arguments.dropFirst().elementsEqual(["--verify-process-capture"]) {
+                try verifyProcessCapture()
+                print("Process capture smoke passed; SSH integration was not run.")
+                return
+            }
             try await run()
             print("osXterm integration runner completed.")
         } catch {
             fputs("osXterm integration runner failed: \(error.localizedDescription)\n", stderr)
             exit(1)
+        }
+    }
+
+    private static func verifyProcessCapture() throws {
+        let result = try runProcess(
+            executable: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "/usr/bin/head -c 262144 /dev/zero; /usr/bin/head -c 262144 /dev/zero >&2"],
+            environment: ["PATH": "/usr/bin:/bin"]
+        )
+        guard result.status == 0, result.output.utf8.count == 262_144, result.error.utf8.count == 262_144 else {
+            throw IntegrationRunnerError.assertionFailed("Large stdout and stderr capture was incomplete.")
         }
     }
 
@@ -37,7 +53,6 @@ struct OsXtermIntegrationRunner {
         let proxyHelper = URL(fileURLWithPath: try required("OSXTERM_PROXY_HELPER", environment))
         let askPassHelper = URL(fileURLWithPath: try required("OSXTERM_ASKPASS_HELPER", environment))
         let ssh1Port = try port("OSXTERM_SSH1_PORT", environment)
-        let ssh2Port = try port("OSXTERM_SSH2_PORT", environment)
         let targetPort = try port("OSXTERM_TARGET_PORT", environment)
         let restrictedTargetPort = try port("OSXTERM_RESTRICTED_TARGET_PORT", environment)
         let certificateTargetPort = try port("OSXTERM_CERT_TARGET_PORT", environment)
@@ -59,7 +74,10 @@ struct OsXtermIntegrationRunner {
             key: privateKey.path
         )
         let jump1 = profile(name: "jump1", host: "127.0.0.1", port: ssh1Port, key: privateKey.path)
-        let jump2 = profile(name: "jump2", host: "127.0.0.1", port: ssh2Port, key: privateKey.path)
+        // The second jump is resolved from ssh1's Docker network namespace.
+        // Using the host loopback address here would send ssh1 back to itself
+        // instead of to the ssh2 fixture service.
+        let jump2 = profile(name: "jump2", host: "ssh2", port: 2222, key: privateKey.path)
         var target = profile(name: "target", host: "target", port: 2222, key: privateKey.path)
         target.jumpProfileIDs = [jump1.id, jump2.id]
 
@@ -94,6 +112,15 @@ struct OsXtermIntegrationRunner {
             knownHosts: knownHosts,
             proxyHelper: nil,
             label: "two-hop jump"
+        )
+        try await assertHopAuthenticationFailures(
+            ssh1Port: ssh1Port,
+            privateKey: privateKey,
+            askPassHelper: askPassHelper
+        )
+        try await assertChangedHostKeyIsRejected(
+            targetPort: targetPort,
+            privateKey: privateKey
         )
 
         let proxyReachableTarget = profile(name: "proxy-target", host: "target", port: 2222, key: privateKey.path)
@@ -181,12 +208,35 @@ struct OsXtermIntegrationRunner {
         command: String = "printf osxterm-integration-ok",
         expectedOutput: String = "osxterm-integration-ok"
     ) async throws {
+        let result = try compiledSessionResult(
+            target: target,
+            profiles: profiles,
+            knownHosts: knownHosts,
+            proxyHelper: proxyHelper,
+            hostKeyPolicy: .acceptNewAfterUserConfirmation,
+            environment: environment,
+            command: command
+        )
+        guard result.status == 0, result.output.contains(expectedOutput) else {
+            throw IntegrationRunnerError.invocationFailed("\(label) did not establish the app-compiled SSH route: \(result.error)")
+        }
+    }
+
+    private static func compiledSessionResult(
+        target: ConnectionProfile,
+        profiles: [ConnectionProfile],
+        knownHosts: URL,
+        proxyHelper: ProxyHelperLaunchConfiguration?,
+        hostKeyPolicy: OpenSSHHostKeyPolicy,
+        environment: [String: String]? = nil,
+        command: String = "printf osxterm-integration-ok"
+    ) throws -> (status: Int32, output: String, error: String) {
         let route = try SSHRouteResolver.resolve(target: target, profiles: profiles)
         let prepared = try OpenSSHCommandCompiler().prepare(
             route: route,
             knownHostsURL: knownHosts,
             proxyHelper: proxyHelper,
-            hostKeyPolicy: .acceptNewAfterUserConfirmation,
+            hostKeyPolicy: hostKeyPolicy,
             purpose: .interactive,
             baseDirectory: FileManager.default.temporaryDirectory
         )
@@ -198,8 +248,223 @@ struct OsXtermIntegrationRunner {
             arguments: arguments,
             environment: environment ?? ProcessInfo.processInfo.environment
         )
-        guard result.status == 0, result.output.contains(expectedOutput) else {
-            throw IntegrationRunnerError.invocationFailed("\(label) did not establish the app-compiled SSH route: \(result.error)")
+        return result
+    }
+
+    private static func assertHopAuthenticationFailures(
+        ssh1Port: Int,
+        privateKey: URL,
+        askPassHelper: URL
+    ) async throws {
+        let directory = try temporaryDirectory(named: "authentication-failures")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        for failedHop in AuthenticationFailureHop.allCases {
+            var outer = profile(
+                name: "authentication-failure-outer",
+                host: "127.0.0.1",
+                port: ssh1Port,
+                key: privateKey.path
+            )
+            var inner = profile(
+                name: "authentication-failure-inner",
+                host: "ssh2",
+                port: 2222,
+                key: privateKey.path
+            )
+            var target = profile(
+                name: "authentication-failure-target",
+                host: "target",
+                port: 2222,
+                key: privateKey.path
+            )
+            target.jumpProfileIDs = [outer.id, inner.id]
+            target.options.autoReconnect = true
+            target.options.maximumReconnectAttempts = 3
+
+            let expectedHost: String
+            switch failedHop {
+            case .outerJump:
+                outer.authentication = .password(secret: SecretReference())
+                expectedHost = outer.host
+            case .innerJump:
+                inner.authentication = .password(secret: SecretReference())
+                expectedHost = inner.host
+            case .target:
+                target.authentication = .password(secret: SecretReference())
+                expectedHost = target.host
+            }
+
+            try await assertExpectedAuthenticationFailure(
+                target: target,
+                profiles: [outer, inner, target],
+                knownHosts: directory.appendingPathComponent("\(failedHop.fileName)-known_hosts"),
+                askPassHelper: askPassHelper,
+                expectedHost: expectedHost,
+                label: failedHop.label
+            )
+        }
+    }
+
+    private static func assertExpectedAuthenticationFailure(
+        target: ConnectionProfile,
+        profiles: [ConnectionProfile],
+        knownHosts: URL,
+        askPassHelper: URL,
+        expectedHost: String,
+        label: String
+    ) async throws {
+        let broker = try SessionCredentialBroker(responses: ["default": "not-the-integration-password"])
+        defer { broker.stop() }
+        let result = try compiledSessionResult(
+            target: target,
+            profiles: profiles,
+            knownHosts: knownHosts,
+            proxyHelper: nil,
+            hostKeyPolicy: .acceptNewAfterUserConfirmation,
+            environment: askPassEnvironment(askPassHelper: askPassHelper, broker: broker)
+        )
+        let events = OpenSSHOutputParser.events(in: result.error)
+        guard result.status != 0 else {
+            throw IntegrationRunnerError.assertionFailed("\(label) unexpectedly authenticated with the intentionally incorrect credential.")
+        }
+        guard events.contains(.authenticationFailed) else {
+            throw IntegrationRunnerError.assertionFailed("\(label) did not report an authentication failure: \(result.error)")
+        }
+        guard result.error.localizedCaseInsensitiveContains(expectedHost) else {
+            throw IntegrationRunnerError.assertionFailed("\(label) did not identify the rejected hop \(expectedHost): \(result.error)")
+        }
+        guard !events.contains(.hostKeyChanged), !events.contains(.hostKeyRejected) else {
+            throw IntegrationRunnerError.assertionFailed("\(label) failed at host-key verification instead of authentication: \(result.error)")
+        }
+
+        let lifecycle = SSHSessionLifecycle()
+        await lifecycle.startResolvingRoute()
+        await lifecycle.waitingForAuthentication()
+        let reconnectPlan = await lifecycle.failed(.authentication, options: target.options)
+        let finalState = await lifecycle.state()
+        guard reconnectPlan == nil,
+              finalState == .failed(message: "Authentication failed.")
+        else {
+            throw IntegrationRunnerError.assertionFailed("\(label) scheduled a reconnect after authentication rejection.")
+        }
+    }
+
+    private static func assertChangedHostKeyIsRejected(
+        targetPort: Int,
+        privateKey: URL
+    ) async throws {
+        let directory = try temporaryDirectory(named: "changed-host-key")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let knownHosts = directory.appendingPathComponent("known_hosts")
+        let endpoint = try SSHHostKeyEndpoint(host: "127.0.0.1", port: targetPort)
+        let previousKey = try generatePreviousHostKey(in: directory)
+        let store = try HostKeyStore(fileURL: knownHosts)
+        try await store.approve(
+            endpoint: endpoint,
+            presented: previousKey,
+            approval: .trustNew
+        )
+
+        var target = profile(
+            name: "changed-host-key-target",
+            host: "127.0.0.1",
+            port: targetPort,
+            key: privateKey.path
+        )
+        target.options.autoReconnect = true
+        target.options.maximumReconnectAttempts = 3
+        let result = try compiledSessionResult(
+            target: target,
+            profiles: [target],
+            knownHosts: knownHosts,
+            proxyHelper: nil,
+            hostKeyPolicy: .requireKnown
+        )
+        let events = OpenSSHOutputParser.events(in: result.error)
+        guard result.status != 0 else {
+            throw IntegrationRunnerError.assertionFailed("Changed host key fixture unexpectedly connected successfully.")
+        }
+        guard events.contains(.hostKeyChanged),
+              OpenSSHHostKeyDiagnosticParser.reportsChangedKey(in: result.error)
+        else {
+            throw IntegrationRunnerError.assertionFailed("Docker target did not produce a changed host-key rejection: \(result.error)")
+        }
+        guard !events.contains(.authenticationFailed) else {
+            throw IntegrationRunnerError.assertionFailed("Changed host key fixture reached authentication before rejecting the key: \(result.error)")
+        }
+
+        let storedRecords = await store.allRecords()
+        guard storedRecords == [SSHKnownHostRecord(endpoint: endpoint, key: previousKey)] else {
+            throw IntegrationRunnerError.assertionFailed("Changed host key rejection modified the app-managed known_hosts record.")
+        }
+        let lifecycle = SSHSessionLifecycle()
+        await lifecycle.startResolvingRoute()
+        await lifecycle.verifyingHostKey()
+        let reconnectPlan = await lifecycle.failed(.hostKey, options: target.options)
+        let finalState = await lifecycle.state()
+        guard reconnectPlan == nil,
+              finalState == .failed(message: "Host key verification failed.")
+        else {
+            throw IntegrationRunnerError.assertionFailed("Changed host key rejection scheduled an automatic reconnect.")
+        }
+    }
+
+    private static func generatePreviousHostKey(in directory: URL) throws -> SSHHostKey {
+        let privateKeyURL = directory.appendingPathComponent("previous-host-key")
+        let result = try runProcess(
+            executable: URL(fileURLWithPath: "/usr/bin/ssh-keygen"),
+            arguments: ["-q", "-t", "ed25519", "-N", "", "-f", privateKeyURL.path],
+            environment: ProcessInfo.processInfo.environment
+        )
+        guard result.status == 0 else {
+            throw IntegrationRunnerError.invocationFailed("Could not generate the previous host key fixture: \(result.error)")
+        }
+        let publicKeyURL = privateKeyURL.appendingPathExtension("pub")
+        let fields = try String(contentsOf: publicKeyURL, encoding: .utf8)
+            .split(whereSeparator: \.isWhitespace)
+        guard fields.count >= 2 else {
+            throw IntegrationRunnerError.assertionFailed("Generated previous host key fixture is malformed.")
+        }
+        return try SSHHostKey(
+            algorithm: String(fields[0]),
+            base64EncodedKey: String(fields[1])
+        )
+    }
+
+    private static func askPassEnvironment(
+        askPassHelper: URL,
+        broker: SessionCredentialBroker
+    ) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["SSH_ASKPASS"] = askPassHelper.path
+        environment["SSH_ASKPASS_REQUIRE"] = "force"
+        environment["DISPLAY"] = "osxterm-integration:0"
+        environment["OSXTERM_ASKPASS_SOCKET"] = broker.socketPath
+        environment["OSXTERM_ASKPASS_TOKEN"] = broker.token
+        return environment
+    }
+
+    private enum AuthenticationFailureHop: CaseIterable {
+        case outerJump
+        case innerJump
+        case target
+
+        var label: String {
+            switch self {
+            case .outerJump: "outer jump authentication failure"
+            case .innerJump: "inner jump authentication failure"
+            case .target: "target authentication failure"
+            }
+        }
+
+        var fileName: String {
+            switch self {
+            case .outerJump: "outer-jump"
+            case .innerJump: "inner-jump"
+            case .target: "target"
+            }
         }
     }
 
@@ -293,19 +558,13 @@ struct OsXtermIntegrationRunner {
     ) async throws {
         let broker = try SessionCredentialBroker(responses: ["default": response])
         defer { broker.stop() }
-        var environment = ProcessInfo.processInfo.environment
-        environment["SSH_ASKPASS"] = askPassHelper.path
-        environment["SSH_ASKPASS_REQUIRE"] = "force"
-        environment["DISPLAY"] = "osxterm-integration:0"
-        environment["OSXTERM_ASKPASS_SOCKET"] = broker.socketPath
-        environment["OSXTERM_ASKPASS_TOKEN"] = broker.token
         try await assertSession(
             target: target,
             profiles: [target],
             knownHosts: knownHosts,
             proxyHelper: nil,
             label: label,
-            environment: environment
+            environment: askPassEnvironment(askPassHelper: askPassHelper, broker: broker)
         )
     }
 
@@ -971,8 +1230,7 @@ struct OsXtermIntegrationRunner {
         private let preparedCommand: PreparedOpenSSHCommand
         private let standardOutput: Pipe
         private let standardError: Pipe
-        private let lock = NSLock()
-        private var standardErrorData = Data()
+        private let diagnosticBuffer = TunnelDiagnosticBuffer()
 
         init(
             process: Process,
@@ -989,20 +1247,19 @@ struct OsXtermIntegrationRunner {
                     handle.readabilityHandler = nil
                 }
             }
-            standardError.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let diagnosticBuffer = self.diagnosticBuffer
+            standardError.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty else {
                     handle.readabilityHandler = nil
                     return
                 }
-                self?.appendDiagnostics(data)
+                diagnosticBuffer.append(data)
             }
         }
 
         var diagnostics: String {
-            lock.lock()
-            defer { lock.unlock() }
-            return String(decoding: standardErrorData, as: UTF8.self)
+            diagnosticBuffer.text
         }
 
         func stop() {
@@ -1016,8 +1273,21 @@ struct OsXtermIntegrationRunner {
         }
 
         deinit { stop() }
+    }
 
-        private func appendDiagnostics(_ data: Data) {
+    /// Only this lock-protected byte buffer is shared with FileHandle's
+    /// background callback. Process ownership remains with IntegrationTunnel.
+    private final class TunnelDiagnosticBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var standardErrorData = Data()
+
+        var text: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return String(decoding: standardErrorData, as: UTF8.self)
+        }
+
+        func append(_ data: Data) {
             lock.lock()
             defer { lock.unlock() }
             let maximum = 64 * 1024
@@ -1031,6 +1301,19 @@ struct OsXtermIntegrationRunner {
     private static func required(_ name: String, _ environment: [String: String]) throws -> String {
         guard let value = environment[name], !value.isEmpty else { throw IntegrationRunnerError.missingEnvironment(name) }
         return value
+    }
+
+    private static func temporaryDirectory(named name: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "osxterm-integration-\(name)-\(UUID().uuidString.lowercased())",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        return directory
     }
 
     private static func port(_ name: String, _ environment: [String: String]) throws -> Int {
@@ -1047,8 +1330,22 @@ struct OsXtermIntegrationRunner {
         input: Data? = nil
     ) throws -> (status: Int32, output: String, error: String) {
         let process = Process()
-        let output = Pipe()
-        let error = Pipe()
+        // OpenSSH verbose output can exceed a pipe's capacity. Capture both
+        // streams in private temporary files so waitUntilExit cannot deadlock
+        // while a child waits for an unread stdout or stderr pipe to drain.
+        let captureDirectory = try temporaryDirectory(named: "process-output")
+        defer { try? FileManager.default.removeItem(at: captureDirectory) }
+        let outputURL = captureDirectory.appendingPathComponent("stdout")
+        let errorURL = captureDirectory.appendingPathComponent("stderr")
+        for url in [outputURL, errorURL] {
+            guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+                throw IntegrationRunnerError.invocationFailed("Could not create private process capture file.")
+            }
+        }
+        let output = try FileHandle(forWritingTo: outputURL)
+        defer { try? output.close() }
+        let error = try FileHandle(forWritingTo: errorURL)
+        defer { try? error.close() }
         let inputPipe = input.map { _ in Pipe() }
         process.executableURL = executable
         process.arguments = arguments
@@ -1064,8 +1361,8 @@ struct OsXtermIntegrationRunner {
         process.waitUntilExit()
         return (
             process.terminationStatus,
-            String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self),
-            String(decoding: error.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            String(decoding: try Data(contentsOf: outputURL), as: UTF8.self),
+            String(decoding: try Data(contentsOf: errorURL), as: UTF8.self)
         )
     }
 }

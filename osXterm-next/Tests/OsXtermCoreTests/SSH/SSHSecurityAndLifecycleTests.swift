@@ -55,6 +55,37 @@ struct SSHSecurityAndLifecycleTests {
     }
 
     @Test
+    func outputParserKeepsAuthenticationAndChangedHostKeyFailuresDistinctAndFailClosed() async {
+        let authenticationDiagnostics = "ops@ssh2: Permission denied (publickey,password,keyboard-interactive)."
+        let authenticationEvents = OpenSSHOutputParser.events(in: authenticationDiagnostics)
+        #expect(authenticationEvents.contains(.authenticationFailed))
+        #expect(!authenticationEvents.contains(.hostKeyChanged))
+
+        let changedKeyDiagnostics = """
+        @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+        @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        """
+        let changedKeyEvents = OpenSSHOutputParser.events(in: changedKeyDiagnostics)
+        #expect(changedKeyEvents.contains(.hostKeyChanged))
+        #expect(!changedKeyEvents.contains(.authenticationFailed))
+        #expect(OpenSSHHostKeyDiagnosticParser.reportsChangedKey(in: changedKeyDiagnostics))
+
+        let options = SSHOptions(autoReconnect: true, maximumReconnectAttempts: 3)
+        let authenticationLifecycle = SSHSessionLifecycle()
+        await authenticationLifecycle.waitingForAuthentication()
+        let authenticationReconnect = await authenticationLifecycle.failed(.authentication, options: options)
+        #expect(authenticationReconnect == nil)
+        #expect(await authenticationLifecycle.state() == .failed(message: "Authentication failed."))
+
+        let hostKeyLifecycle = SSHSessionLifecycle()
+        await hostKeyLifecycle.verifyingHostKey()
+        let hostKeyReconnect = await hostKeyLifecycle.failed(.hostKey, options: options)
+        #expect(hostKeyReconnect == nil)
+        #expect(await hostKeyLifecycle.state() == .failed(message: "Host key verification failed."))
+    }
+
+    @Test
     func brokerReturnsOnlyTokenAuthorizedPromptResponse() throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
