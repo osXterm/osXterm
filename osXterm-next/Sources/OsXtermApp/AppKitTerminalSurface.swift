@@ -29,6 +29,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
     var onProcessStarted: (UUID) -> Void
     var onProcessTerminated: (UUID, Int32?) -> Void
     var onProcessOutput: (UUID, Data) -> Void
+    var onFindResult: (UUID, TerminalFindResultPresentation) -> Void
 
     func makeNSView(context _: Context) -> SwiftTermTerminalContainerView {
         let view = SwiftTermTerminalContainerView()
@@ -37,6 +38,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
         view.onProcessStarted = onProcessStarted
         view.onProcessTerminated = onProcessTerminated
         view.onProcessOutput = onProcessOutput
+        view.onFindResult = onFindResult
         view.apply(
             sessionID: sessionID,
             launch: launch,
@@ -59,6 +61,7 @@ struct AppKitTerminalSurface: NSViewRepresentable {
         nsView.onProcessStarted = onProcessStarted
         nsView.onProcessTerminated = onProcessTerminated
         nsView.onProcessOutput = onProcessOutput
+        nsView.onFindResult = onFindResult
         nsView.apply(
             sessionID: sessionID,
             launch: launch,
@@ -81,6 +84,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
     var onProcessStarted: ((UUID) -> Void)?
     var onProcessTerminated: ((UUID, Int32?) -> Void)?
     var onProcessOutput: ((UUID, Data) -> Void)?
+    var onFindResult: ((UUID, TerminalFindResultPresentation) -> Void)?
 
     private let terminalView: TerminalView
     private var process: LocalProcess?
@@ -195,14 +199,44 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
 
         if let findRequest, findRequest.sequence > lastFindRequestSequence {
             lastFindRequestSequence = findRequest.sequence
-            showFindInterface()
+            performTerminalFind(findRequest)
         }
     }
 
-    private func showFindInterface() {
-        let item = NSMenuItem()
-        item.tag = NSTextFinder.Action.showFindInterface.rawValue
-        terminalView.performTextFinderAction(item)
+    private func performTerminalFind(_ request: TerminalFindPresentation) {
+        guard let sessionID else { return }
+        guard request.direction != .clear, !request.query.isEmpty else {
+            terminalView.clearSearch()
+            onFindResult?(sessionID, TerminalFindResultPresentation(
+                sequence: request.sequence,
+                didFindMatch: false,
+                currentMatchIndex: 0,
+                totalMatches: 0
+            ))
+            return
+        }
+
+        let options = SearchOptions(
+            caseSensitive: request.isCaseSensitive,
+            regex: request.usesRegularExpression,
+            wholeWord: request.matchesWholeWord
+        )
+        let didFindMatch: Bool
+        switch request.direction {
+        case .next:
+            didFindMatch = terminalView.findNext(request.query, options: options)
+        case .previous:
+            didFindMatch = terminalView.findPrevious(request.query, options: options)
+        case .clear:
+            didFindMatch = false
+        }
+        let summary = terminalView.searchMatchSummary(request.query, options: options)
+        onFindResult?(sessionID, TerminalFindResultPresentation(
+            sequence: request.sequence,
+            didFindMatch: didFindMatch,
+            currentMatchIndex: summary.index,
+            totalMatches: summary.total
+        ))
     }
 
     private func launchProcessIfNeeded(_ launch: TerminalProcessLaunchPresentation) {

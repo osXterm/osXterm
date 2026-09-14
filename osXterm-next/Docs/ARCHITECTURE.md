@@ -52,8 +52,10 @@ and Hack from the SwiftPM resource bundle. The terminal adapter resolves the
 chosen bundled font rather than looking it up in the user's font collection.
 `TerminalTheme` offers 20 fixed ANSI palettes, with System dynamically
 following the current macOS appearance. The terminal header's Find control
-asks the adapter to invoke SwiftTerm's native Finder interface, so matching
-and navigation operate on the actual terminal buffer rather than a copied log.
+opens localized app controls that call SwiftTerm's public search API, so
+matching and navigation operate on the actual terminal buffer rather than a
+copied log. Search requests and results stay in memory and are not saved with
+the workspace.
 The terminal tab strip and pane header use macOS 26's glass material only for
 navigation and control surfaces. `accessibilityReduceTransparency` keeps their
 standard bar backgrounds, while inspector transitions honor

@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -273,10 +274,21 @@ private struct TerminalPaneView: View {
     @ObservedObject var model: AppWorkspaceModel
     @State private var nextFindSequence: UInt64 = 0
     @State private var findRequest: TerminalFindPresentation?
+    @State private var isFindBarPresented = false
+    @State private var findQuery = ""
+    @State private var isFindCaseSensitive = false
+    @State private var usesFindRegularExpression = false
+    @State private var matchesFindWholeWord = false
+    @State private var findResult: TerminalFindResultPresentation?
+    @FocusState private var isFindFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             terminalHeader
+            if isFindBarPresented {
+                Divider()
+                terminalFindBar
+            }
             Divider()
             ZStack {
                 AppKitTerminalSurface(
@@ -316,6 +328,16 @@ private struct TerminalPaneView: View {
                             launchID: launchID,
                             data: data
                         )
+                    },
+                    onFindResult: { resultSessionID, result in
+                        DispatchQueue.main.async {
+                            guard resultSessionID == session.id,
+                                  findRequest?.sequence == result.sequence
+                            else {
+                                return
+                            }
+                            findResult = result
+                        }
                     }
                 )
                 .id(session.id)
@@ -330,6 +352,26 @@ private struct TerminalPaneView: View {
         .accessibilityElement(children: .contain)
         .onChange(of: session.id) { _, _ in
             findRequest = nil
+            isFindBarPresented = false
+            findQuery = ""
+            findResult = nil
+            isFindFieldFocused = false
+        }
+        .onChange(of: findQuery) { _, _ in
+            guard isFindBarPresented else { return }
+            requestTerminalFind(.next)
+        }
+        .onChange(of: isFindCaseSensitive) { _, _ in
+            guard isFindBarPresented else { return }
+            requestTerminalFind(.next)
+        }
+        .onChange(of: usesFindRegularExpression) { _, _ in
+            guard isFindBarPresented else { return }
+            requestTerminalFind(.next)
+        }
+        .onChange(of: matchesFindWholeWord) { _, _ in
+            guard isFindBarPresented else { return }
+            requestTerminalFind(.next)
         }
     }
 
@@ -429,6 +471,78 @@ private struct TerminalPaneView: View {
         .osXtermGlassSurface()
     }
 
+    private var terminalFindBar: some View {
+        HStack(spacing: 7) {
+            TextField(AppText.string("Find", korean: "찾기"), text: $findQuery)
+                .textFieldStyle(.roundedBorder)
+                .focused($isFindFieldFocused)
+                .onSubmit { requestTerminalFind(.next) }
+                .accessibilityLabel(AppText.string("Find in terminal", korean: "터미널에서 찾기"))
+                .frame(minWidth: 130, maxWidth: .infinity)
+
+            Button {
+                requestTerminalFind(.previous)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .help(AppText.string("Previous match", korean: "이전 일치 항목"))
+            .accessibilityLabel(AppText.string("Previous terminal match", korean: "이전 터미널 일치 항목"))
+            .disabled(findQuery.isEmpty)
+
+            Button {
+                requestTerminalFind(.next)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .help(AppText.string("Next match", korean: "다음 일치 항목"))
+            .accessibilityLabel(AppText.string("Next terminal match", korean: "다음 터미널 일치 항목"))
+            .disabled(findQuery.isEmpty)
+
+            Toggle("Aa", isOn: $isFindCaseSensitive)
+                .toggleStyle(.button)
+                .help(AppText.string("Case sensitive", korean: "대소문자 구분"))
+                .accessibilityLabel(AppText.string("Case sensitive", korean: "대소문자 구분"))
+
+            Toggle(".*", isOn: $usesFindRegularExpression)
+                .toggleStyle(.button)
+                .help(AppText.string("Use regular expression", korean: "정규식 사용"))
+                .accessibilityLabel(AppText.string("Use regular expression", korean: "정규식 사용"))
+
+            Toggle(AppText.string("Word", korean: "단어"), isOn: $matchesFindWholeWord)
+                .toggleStyle(.button)
+                .help(AppText.string("Match whole word", korean: "단어 단위 일치"))
+                .accessibilityLabel(AppText.string("Match whole word", korean: "단어 단위 일치"))
+
+            if let summary = terminalFindSummary {
+                Text(summary)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 42, alignment: .trailing)
+                    .accessibilityLabel(AppText.string(
+                        "Terminal search result \(summary)",
+                        korean: "터미널 검색 결과 \(summary)"
+                    ))
+            }
+
+            Button {
+                closeTerminalFind()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help(AppText.string("Close Find", korean: "찾기 닫기"))
+            .accessibilityLabel(AppText.string("Close terminal find", korean: "터미널 찾기 닫기"))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.bar)
+        .osXtermGlassSurface()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(AppText.string("Terminal find controls", korean: "터미널 찾기 제어"))
+    }
+
     private var headerSubtitle: String {
         if let directory = session.currentDirectory, !directory.isEmpty {
             return directory
@@ -453,12 +567,47 @@ private struct TerminalPaneView: View {
             && model.snapshot.broadcastTargetSessionIDs.contains(session.id)
     }
 
+    private var terminalFindSummary: String? {
+        guard !findQuery.isEmpty else { return nil }
+        guard let findResult else {
+            return AppText.string("Searching", korean: "검색 중")
+        }
+        guard findResult.didFindMatch, findResult.totalMatches > 0 else {
+            return AppText.string("No matches", korean: "일치 항목 없음")
+        }
+        return "\(findResult.currentMatchIndex)/\(findResult.totalMatches)"
+    }
+
     private func showFindInterface() {
+        isFindBarPresented = true
+        requestTerminalFind(.next)
+        DispatchQueue.main.async {
+            isFindFieldFocused = true
+        }
+    }
+
+    private func closeTerminalFind() {
+        findQuery = ""
+        findResult = nil
+        isFindBarPresented = false
+        isFindFieldFocused = false
+        requestTerminalFind(.clear)
+    }
+
+    private func requestTerminalFind(_ direction: TerminalFindDirection) {
         nextFindSequence &+= 1
         if nextFindSequence == 0 {
             nextFindSequence = 1
         }
-        findRequest = TerminalFindPresentation(sequence: nextFindSequence)
+        findResult = nil
+        findRequest = TerminalFindPresentation(
+            sequence: nextFindSequence,
+            query: findQuery,
+            direction: direction,
+            isCaseSensitive: isFindCaseSensitive,
+            usesRegularExpression: usesFindRegularExpression,
+            matchesWholeWord: matchesFindWholeWord
+        )
     }
 
     private func chooseSessionLogExport() {

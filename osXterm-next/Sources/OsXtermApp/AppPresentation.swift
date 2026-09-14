@@ -118,11 +118,29 @@ struct TerminalInputPresentation: Hashable {
     var data: Data
 }
 
-/// A one-way, in-memory request to show SwiftTerm's native terminal search
-/// interface. The sequence makes a repeated Find action observable to the
-/// AppKit adapter without persisting a query or terminal contents.
+enum TerminalFindDirection: Hashable {
+    case next
+    case previous
+    case clear
+}
+
+/// A one-way, in-memory terminal-buffer search request. The sequence makes a
+/// repeated navigation action observable to the AppKit adapter without
+/// persisting a query or terminal contents.
 struct TerminalFindPresentation: Hashable {
     var sequence: UInt64
+    var query: String
+    var direction: TerminalFindDirection
+    var isCaseSensitive: Bool
+    var usesRegularExpression: Bool
+    var matchesWholeWord: Bool
+}
+
+struct TerminalFindResultPresentation: Hashable {
+    var sequence: UInt64
+    var didFindMatch: Bool
+    var currentMatchIndex: Int
+    var totalMatches: Int
 }
 
 struct TerminalSessionPresentation: Identifiable, Hashable {
