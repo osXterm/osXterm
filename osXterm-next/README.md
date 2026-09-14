@@ -18,6 +18,10 @@ The app uses SwiftUI and AppKit, SwiftTerm 1.19.0 for its PTY-backed terminal su
 
 The checked-in project contains `osXterm.xcodeproj` with a shared `osXterm` scheme. Its app and test targets delegate to the pinned Swift package so Xcode and command-line builds use the same source graph and packaging scripts.
 
+## User guide
+
+Read the Korean [user guide](Docs/USER_GUIDE.md) for profiles, authentication, jump hosts, proxies, terminal workspace controls, broadcast input, tunnels, file transfers, session logs, and known validation limits.
+
 ## Requirements
 
 - macOS 26 or newer on Apple Silicon.
