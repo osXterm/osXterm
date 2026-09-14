@@ -129,6 +129,8 @@ struct TerminalSessionPresentation: Identifiable, Hashable {
     var activeProcessDescription: String?
     var supportsFileTransfer: Bool
     var isReadOnly: Bool
+    var isSessionLoggingEnabled: Bool
+    var hasSessionLog: Bool
     var pendingInput: TerminalInputPresentation?
 
     var accessibilityState: String {

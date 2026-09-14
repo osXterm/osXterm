@@ -43,4 +43,6 @@ SCP forces SFTP transport mode. Its process is retained by the transfer queue so
 
 Workspace restoration restores descriptors and layout metadata. It never restarts commands or macros and never represents a terminated remote shell as recovered. Broadcast input is empty by default and targets only explicitly checked ready sessions.
 
+Session logging is disabled by default. When enabled, active and future terminal descriptors record to `Application Support/osXterm/Logs` with a mode-0700 directory and mode-0600 files. The visible export action first flushes the current file and then uses `SecureFileExporter` on a utility task to stage a private copy beside the user-selected destination before replacing that destination.
+
 SSH config import first keeps a parsed preview in memory. The preview displays importable profiles, supported route details, unsupported directive names, and parser diagnostics. The app persists only profile IDs explicitly selected from that preview, and the parser never evaluates `Match exec` or `ProxyCommand`.

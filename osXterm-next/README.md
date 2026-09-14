@@ -9,7 +9,7 @@ The app uses SwiftUI and AppKit, SwiftTerm 1.19.0 for its PTY-backed terminal su
 - Direct SSH and local shell tabs, reconnect policy, host-key review, app-managed `known_hosts`, and per-session AskPass IPC.
 - Ordered jump paths, HTTP CONNECT and SOCKS5 proxies with optional credentials, and one shared route compiler for terminals, SFTP, SCP, and tunnels.
 - Local, remote, dynamic, remote dynamic, local Unix-socket, and remote Unix-socket forwarding. The tunnel panel keeps listener creation and destination checks separate: local TCP and Unix checks connect through the listener, while remote forwarding checks the local destination separately. Independent tunnels remain visible in the menu bar and are stopped during confirmed app shutdown.
-- A SwiftTerm terminal bridge with tabs, two-pane layouts, Unicode input, paste protection for OSC 52, user-controlled logs, and broadcast input that is off by default. Its System, Midnight, Solarized Dark, and Solarized Light settings apply foreground, background, selection, cursor, and ANSI palette colors through the terminal adapter.
+- A SwiftTerm terminal bridge with tabs, two-pane layouts, Unicode input, paste protection for OSC 52, user-controlled logs, session-log export to a user-selected local file with private permissions, and broadcast input that is off by default. Its System, Midnight, Solarized Dark, and Solarized Light settings apply foreground, background, selection, cursor, and ANSI palette colors through the terminal adapter.
 - Structured SFTP v3 browsing and transfer operations. Directory listings do not parse `ls` output. The inspector supports direct remote-path entry, folder navigation, upload, download, recursive directory work, symlinks, permissions, selectable overwrite/skip/rename behavior, cancellation, and retry through the transfer queue. Single-file SFTP retries verify source metadata and the already transferred SHA-256 prefix before resuming a partial destination.
 - Remote regular files can open as app-managed local editing copies. Editor saves remain local until the user explicitly selects Save to Remote, which fails closed if the remote source changed.
 - SCP upload and download use the same generated route and credential policy as SFTP. osXterm forces SCP's SFTP transport mode and rejects unsafe legacy-SCP remote paths.
@@ -68,7 +68,7 @@ Read [Docs/TESTING.md](Docs/TESTING.md) before treating a release as verified. T
 - `OsXtermCore` resolves a route once and generates a mode-0600 OpenSSH configuration for that route.
 - The app, SFTP subsystem, SCP process, and tunnel process consume that one route configuration.
 - `osXtermAskPass` and `osXtermProxy` obtain session-only credentials through a mode-0700 Unix-domain-socket broker with a random token.
-- Runtime messages are sanitized before being shown as errors. Logs are opt-in and stored under Application Support with mode 0600.
+- Runtime messages are sanitized before being shown as errors. Logs are opt-in, stored under Application Support with mode 0600, and exported through a staged private-file copy only after the user chooses a destination.
 
 ## Current known limitations
 

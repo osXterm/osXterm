@@ -6,6 +6,8 @@ enum CoreWorkspaceServiceError: LocalizedError, Equatable {
     case profileNotFound
     case sessionNotFound
     case sessionNotReady
+    case sessionLogUnavailable
+    case sessionLogExportFailed
     case tunnelNotFound
     case transferNotFound
     case invalidProfile(String)
@@ -21,6 +23,10 @@ enum CoreWorkspaceServiceError: LocalizedError, Equatable {
             AppText.string("The selected terminal session no longer exists.", korean: "선택한 터미널 세션이 더 이상 없습니다.")
         case .sessionNotReady:
             AppText.string("Wait for the SSH session to finish connecting.", korean: "SSH 세션 연결이 완료될 때까지 기다리세요.")
+        case .sessionLogUnavailable:
+            AppText.string("No recorded log is available for this session.", korean: "이 세션에서 기록된 로그를 찾을 수 없습니다.")
+        case .sessionLogExportFailed:
+            AppText.string("The session log could not be exported. Check the selected folder and try again.", korean: "세션 로그를 내보낼 수 없습니다. 선택한 폴더를 확인한 뒤 다시 시도하세요.")
         case .tunnelNotFound:
             AppText.string("The selected tunnel no longer exists.", korean: "선택한 터널이 더 이상 없습니다.")
         case .transferNotFound:
@@ -721,6 +727,31 @@ final class CoreWorkspaceService: AppWorkspaceService {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
+    func exportSessionLog(sessionID: UUID, to url: URL) async throws {
+        try await loadIfNeeded()
+        guard let session = sessions[sessionID] else {
+            throw CoreWorkspaceServiceError.sessionNotFound
+        }
+
+        do {
+            try session.logFile?.synchronize()
+        } catch {
+            throw CoreWorkspaceServiceError.sessionLogExportFailed
+        }
+
+        let sourceURL = sessionLogURL(for: session.id)
+        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            throw CoreWorkspaceServiceError.sessionLogUnavailable
+        }
+        do {
+            try await SecureFileExporter.exportFile(from: sourceURL, to: url)
+        } catch SecureFileExporterError.sourceDoesNotExist {
+            throw CoreWorkspaceServiceError.sessionLogUnavailable
+        } catch {
+            throw CoreWorkspaceServiceError.sessionLogExportFailed
+        }
+    }
+
     func enqueueUpload(
         urls: [URL],
         to sessionID: UUID,
@@ -1397,7 +1428,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         guard let session = sessions[sessionID], session.state.isInputReady else {
             throw CoreWorkspaceServiceError.sessionNotReady
         }
-        if workspaceDocument.settings.sessionLoggingEnabled {
+        if session.descriptor.shouldLog {
             appendSessionLog(Data("[input \(Date())] ".utf8) + data, to: session)
         }
         for targetID in broadcastTargetSessionIDs where targetID != sessionID {
@@ -1424,6 +1455,19 @@ final class CoreWorkspaceService: AppWorkspaceService {
         }
         workspaceDocument.settings = core
         try await workspaceRepository.updateSettings(core)
+        var didUpdateSessionLogging = false
+        for session in sessions.values where session.descriptor.shouldLog != core.sessionLoggingEnabled {
+            session.descriptor.shouldLog = core.sessionLoggingEnabled
+            didUpdateSessionLogging = true
+            if !core.sessionLoggingEnabled {
+                try? session.logFile?.synchronize()
+                try? session.logFile?.close()
+                session.logFile = nil
+            }
+        }
+        if didUpdateSessionLogging {
+            try await persistWorkspace()
+        }
         emitSnapshot()
     }
 
@@ -1637,6 +1681,8 @@ final class CoreWorkspaceService: AppWorkspaceService {
                     .map { "\($0.username)@\($0.host):\($0.port)" },
             supportsFileTransfer: !session.isLocal && session.state.isInputReady,
             isReadOnly: false,
+            isSessionLoggingEnabled: session.descriptor.shouldLog,
+            hasSessionLog: session.logFile != nil || FileManager.default.fileExists(atPath: sessionLogURL(for: session.id).path),
             pendingInput: session.pendingInput
         )
     }
@@ -3371,10 +3417,11 @@ final class CoreWorkspaceService: AppWorkspaceService {
                     withIntermediateDirectories: true,
                     attributes: [.posixPermissions: 0o700]
                 )
-                let url = directory.appendingPathComponent("\(session.id.uuidString.lowercased()).log")
+                let url = sessionLogURL(for: session.id)
                 if !FileManager.default.fileExists(atPath: url.path) {
                     FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
                 }
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
                 session.logFile = try FileHandle(forWritingTo: url)
                 try session.logFile?.seekToEnd()
             }
@@ -3384,6 +3431,12 @@ final class CoreWorkspaceService: AppWorkspaceService {
             session.logFile?.closeFile()
             session.logFile = nil
         }
+    }
+
+    private func sessionLogURL(for sessionID: UUID) -> URL {
+        storageDirectory
+            .appendingPathComponent("Logs", isDirectory: true)
+            .appendingPathComponent("\(sessionID.uuidString.lowercased()).log", isDirectory: false)
     }
 
     private func enqueueTerminalInput(_ data: Data, to sessionID: UUID) {

@@ -116,8 +116,8 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
                 Toggle(AppText.string("Record session logs", korean: "세션 로그 기록"), isOn: $draft.sessionLoggingEnabled)
                 Text(AppText.string(
-                    "Logs are opt-in. Review the selected log location before exporting or sharing them.",
-                    korean: "로그 기록은 사용자가 선택한 경우에만 합니다. 내보내거나 공유하기 전에 저장 위치를 확인하세요."
+                    "Logs are opt-in and the setting applies to active and future sessions. Review the selected log location before exporting or sharing them.",
+                    korean: "로그 기록은 사용자가 선택한 경우에만 하며, 현재와 이후 세션에 적용됩니다. 내보내거나 공유하기 전에 저장 위치를 확인하세요."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)

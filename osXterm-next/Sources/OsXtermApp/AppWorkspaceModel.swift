@@ -228,6 +228,12 @@ final class AppWorkspaceModel: ObservableObject {
         }
     }
 
+    func exportSessionLog(sessionID: UUID, to url: URL) {
+        perform(title: AppText.string("Could not export session log", korean: "세션 로그를 내보낼 수 없습니다"), refreshAfter: false) { [service] in
+            try await service.exportSessionLog(sessionID: sessionID, to: url)
+        }
+    }
+
     func enqueueUpload(urls: [URL], to sessionID: UUID, conflictPolicy: TransferConflictPolicy = .rename) {
         perform(title: AppText.string("Could not queue upload", korean: "업로드를 대기열에 추가할 수 없습니다")) { [service] in
             try await service.enqueueUpload(urls: urls, to: sessionID, conflictPolicy: conflictPolicy)

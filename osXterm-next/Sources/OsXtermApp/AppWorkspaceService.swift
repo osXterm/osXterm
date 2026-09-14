@@ -53,6 +53,7 @@ protocol AppWorkspaceService: AnyObject {
     func importSSHConfig(previewID: UUID, profileIDs: Set<UUID>) async throws
     func discardSSHConfigImportPreview(id: UUID) async
     func exportProfiles(ids: [UUID], to url: URL) async throws
+    func exportSessionLog(sessionID: UUID, to url: URL) async throws
 
     func enqueueUpload(urls: [URL], to sessionID: UUID, conflictPolicy: TransferConflictPolicy) async throws
     func enqueueSCPUpload(urls: [URL], to sessionID: UUID, conflictPolicy: TransferConflictPolicy) async throws
@@ -120,6 +121,7 @@ extension AppWorkspaceService {
     func importSSHConfig(previewID _: UUID, profileIDs _: Set<UUID>) async throws { throw AppWorkspaceServiceError.unsupported("SSH config import") }
     func discardSSHConfigImportPreview(id _: UUID) async {}
     func exportProfiles(ids _: [UUID], to _: URL) async throws { throw AppWorkspaceServiceError.unsupported("profile export") }
+    func exportSessionLog(sessionID _: UUID, to _: URL) async throws { throw AppWorkspaceServiceError.unsupported("session log export") }
 
     func enqueueUpload(urls _: [URL], to _: UUID, conflictPolicy _: TransferConflictPolicy) async throws { throw AppWorkspaceServiceError.unsupported("uploads") }
     func enqueueSCPUpload(urls _: [URL], to _: UUID, conflictPolicy _: TransferConflictPolicy) async throws { throw AppWorkspaceServiceError.unsupported("SCP uploads") }

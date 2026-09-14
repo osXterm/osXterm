@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct WorkspaceCenterView: View {
     @ObservedObject var model: AppWorkspaceModel
@@ -340,6 +342,21 @@ private struct TerminalPaneView: View {
             }
             Spacer()
             SessionStateLabel(state: session.state)
+            if session.isSessionLoggingEnabled {
+                Image(systemName: "record.circle")
+                    .foregroundStyle(.secondary)
+                    .help(AppText.string("Session logging is enabled", korean: "세션 로그 기록이 켜져 있습니다"))
+                    .accessibilityLabel(AppText.string("Session logging is enabled", korean: "세션 로그 기록이 켜져 있습니다"))
+            }
+            Button {
+                chooseSessionLogExport()
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
+            .buttonStyle(.borderless)
+            .help(AppText.string("Export Session Log", korean: "세션 로그 내보내기"))
+            .accessibilityLabel(AppText.string("Export log for \(session.title)", korean: "\(session.title) 로그 내보내기"))
+            .disabled(!session.hasSessionLog || !model.isServiceAvailable)
             if session.state.isInputReady {
                 Button {
                     model.disconnect(sessionID: session.id)
@@ -375,6 +392,19 @@ private struct TerminalPaneView: View {
             return process
         }
         return session.accessibilityState
+    }
+
+    private func chooseSessionLogExport() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "log") ?? .plainText]
+        panel.nameFieldStringValue = "osxterm-session-\(session.id.uuidString.prefix(8).lowercased()).log"
+        panel.message = AppText.string(
+            "Choose a location for this opt-in terminal log. It can include sensitive terminal input and output.",
+            korean: "사용자가 기록한 터미널 로그의 저장 위치를 선택하세요. 민감한 터미널 입력과 출력이 포함될 수 있습니다."
+        )
+        if panel.runModal() == .OK, let url = panel.url {
+            model.exportSessionLog(sessionID: session.id, to: url)
+        }
     }
 }
 
