@@ -31,6 +31,7 @@ Not complete. The source implementation and verification harness are substantial
 - The same direct typecheck passed for all app sources with the fixed SwiftTerm module, plus AskPass, proxy helper, and integration runner source.
 - The terminal theme bridge typechecks against SwiftTerm 1.19.0's native color and palette APIs; live visual verification remains part of the blocked app-run gate.
 - All 39 Swift Testing core tests passed macro expansion and type checking with the Xcode Testing plugin.
+- The route compiler test verifies that a target proxy is rendered only on the Mac-facing jump hop while the target receives the complete `ProxyJump` chain.
 - A manually linked Swift Testing runner executed all 39 core tests successfully outside the seatbelt sandbox, including the real Unix-domain credential-broker IPC exchange. This is supplemental direct-compiler evidence, not a substitute for the blocked `swift test` release gate.
 - A standalone arm64 smoke executable ran `SFTPResumeIntegrityVerifier` against a deterministic structured SFTP transport. It accepted matching prefix bytes and rejected changed prefix bytes.
 - A standalone arm64 smoke executable parsed an SSH config preview and confirmed that a target cannot be imported without its referenced jump profile.

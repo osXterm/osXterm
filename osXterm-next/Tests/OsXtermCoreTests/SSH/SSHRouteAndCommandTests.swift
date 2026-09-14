@@ -125,6 +125,14 @@ struct SSHRouteAndCommandTests {
         #expect(config.contains("PreferredAuthentications keyboard-interactive,password"))
         #expect(!config.contains(secret.keychainAccount))
         #expect(prepared.invocation.requiresAskPass)
+        let outerAlias = OpenSSHRouteConfiguration.alias(for: outer)
+        let targetAlias = OpenSSHRouteConfiguration.alias(for: target)
+        let blocks = config.components(separatedBy: "\n\n")
+        let outerBlock = blocks.first { $0.contains("Host \(outerAlias)") } ?? ""
+        let targetBlock = blocks.first { $0.contains("Host \(targetAlias)") } ?? ""
+        #expect(outerBlock.contains("ProxyCommand "))
+        #expect(!targetBlock.contains("ProxyCommand "))
+        #expect(targetBlock.contains("ProxyJump \"\(outerAlias)\""))
         #expect(prepared.invocation.credentialRequirements.contains(.proxy(
             secret: secret,
             prompt: "proxy:build@proxy.example:8080"
