@@ -328,7 +328,7 @@ final class SwiftTermTerminalContainerView: NSView, TerminalViewDelegate, LocalP
     }
 }
 
-private struct TerminalThemeVisualStyle {
+struct TerminalThemeVisualStyle {
     let cacheKey: String
     let foreground: NSColor
     let background: NSColor

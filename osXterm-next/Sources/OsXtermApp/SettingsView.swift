@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -131,6 +132,16 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+
+            Section(AppText.string("Terminal Preview", korean: "터미널 미리보기")) {
+                TerminalAppearancePreview(
+                    fontName: draft.terminalFontName,
+                    fontSize: draft.terminalFontSize,
+                    lineSpacing: draft.terminalLineSpacing,
+                    themeName: draft.terminalThemeName,
+                    appearance: draft.appearance
+                )
+            }
         }
         .formStyle(.grouped)
     }
@@ -175,5 +186,68 @@ struct SettingsView: View {
             get: { TerminalTheme(persistedName: draft.terminalThemeName) },
             set: { draft.terminalThemeName = $0.rawValue }
         )
+    }
+}
+
+private struct TerminalAppearancePreview: View {
+    let fontName: String
+    let fontSize: Double
+    let lineSpacing: Double
+    let themeName: String
+    let appearance: AppSettingsPresentation.Appearance
+
+    private var terminalTheme: TerminalTheme {
+        TerminalTheme(persistedName: themeName)
+    }
+
+    private var previewAppearance: NSAppearance {
+        switch appearance {
+        case .system:
+            NSApp.effectiveAppearance
+        case .light:
+            NSAppearance(named: .aqua) ?? NSApp.effectiveAppearance
+        case .dark:
+            NSAppearance(named: .darkAqua) ?? NSApp.effectiveAppearance
+        }
+    }
+
+    private var visualStyle: TerminalThemeVisualStyle {
+        TerminalThemeVisualStyle.resolve(terminalTheme, appearance: previewAppearance)
+    }
+
+    private var selectedFont: TerminalFont {
+        TerminalFont(persistedName: fontName)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(nsColor: visualStyle.caret))
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text("\(terminalTheme.displayName)  \(selectedFont.displayName)")
+                    .font(.caption.weight(.medium))
+            }
+
+            Text("dev@osxterm ~ % ssh admin@bastion")
+            Text("한글 입력  emoji  UTF-8")
+            Text("$ git status")
+        }
+        .font(.custom(selectedFont.regularPostScriptName, size: fontSize))
+        .lineSpacing(max(0, lineSpacing - 1))
+        .foregroundStyle(Color(nsColor: visualStyle.foreground))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(nsColor: visualStyle.background), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color(nsColor: visualStyle.selectionBackground).opacity(0.75))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(AppText.string(
+            "Terminal appearance preview using \(terminalTheme.displayName) and \(selectedFont.displayName)",
+            korean: "\(terminalTheme.displayName) 및 \(selectedFont.displayName) 터미널 모양 미리보기"
+        ))
     }
 }
