@@ -36,6 +36,7 @@ After the Xcode license has been accepted by the machine owner:
 
 ```sh
 cd /Users/one393/Workspace/02-Area/osXterm/osXterm-next
+Scripts/check-environment.sh
 Scripts/package-app.sh
 open .build/app/osXterm.app
 ```
@@ -57,6 +58,7 @@ To build from Xcode, open `osXterm.xcodeproj` and select the shared `osXterm` sc
 Run the complete release gate with:
 
 ```sh
+Scripts/check-environment.sh --integration
 Scripts/verify.sh
 ```
 

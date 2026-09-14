@@ -94,4 +94,4 @@ OSC 52 원격 클립보드 접근은 기본 차단입니다. 필요한 경우에
 
 ## 현재 검증 제한
 
-이 작업 환경에서는 Xcode 라이선스가 아직 승인되지 않았고 Docker Compose가 설치되어 있지 않습니다. 따라서 `swift test`, Docker 기반 통합 테스트, Release 앱 빌드, DMG 생성과 추출 앱 검증은 아직 통과로 기록되지 않았습니다. 로컬 패키지 생성이 가능한 환경에서는 README의 빌드 절차와 `Scripts/verify.sh`를 실행한 뒤 [TESTING.md](TESTING.md)의 사람 검증 항목까지 수행하세요.
+이 작업 환경에서는 Xcode 라이선스가 아직 승인되지 않았고 Docker Compose가 설치되어 있지 않습니다. 따라서 `swift test`, Docker 기반 통합 테스트, Release 앱 빌드, DMG 생성과 추출 앱 검증은 아직 통과로 기록되지 않았습니다. 로컬 패키지 생성이 가능한 환경에서는 먼저 `Scripts/check-environment.sh`를 실행하고, 전체 검증 전에는 `Scripts/check-environment.sh --integration`을 실행하세요. 그 뒤 README의 빌드 절차와 `Scripts/verify.sh`를 실행한 뒤 [TESTING.md](TESTING.md)의 사람 검증 항목까지 수행하세요.

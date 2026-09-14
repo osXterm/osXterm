@@ -5,10 +5,11 @@
 Run every release check from the project root:
 
 ```sh
+Scripts/check-environment.sh --integration
 Scripts/verify.sh
 ```
 
-The script selects Xcode when it is installed, resolves the fixed SwiftPM graph, runs the unit suite, starts the isolated Docker Compose environment, runs `osXtermIntegrationRunner`, packages an ad-hoc signed app, creates a DMG, mounts the DMG, copies the app to a separate temporary directory, checks the copied app's signature and arm64 main executable, and repeats integration checks with helpers taken from that copied app.
+`Scripts/check-environment.sh` checks Apple Silicon, the selected Xcode license, Swift, and the system OpenSSH executable. Add `--integration` to also require Docker Compose. The complete verifier resolves the fixed SwiftPM graph, runs the unit suite, starts the isolated Docker Compose environment, runs `osXtermIntegrationRunner`, packages an ad-hoc signed app, creates a DMG, mounts the DMG, copies the app to a separate temporary directory, checks the copied app's signature and arm64 main executable, and repeats integration checks with helpers taken from that copied app.
 
 The generated app is ad-hoc signed only. Developer ID signing and notarization are intentionally outside this release gate.
 

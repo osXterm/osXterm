@@ -10,10 +10,7 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
-if ! docker compose version >/dev/null 2>&1; then
-    echo "Docker Compose is required for isolated integration tests." >&2
-    exit 2
-fi
+"$project_dir/Scripts/check-environment.sh" --integration
 
 "$project_dir/Scripts/prepare-integration-fixture.sh"
 

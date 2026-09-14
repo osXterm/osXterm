@@ -13,6 +13,8 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
+"$project_dir/Scripts/check-environment.sh"
+
 cd "$project_dir"
 bin_dir="$(swift build --configuration "$build_configuration" --show-bin-path)"
 swift build --configuration "$build_configuration"
