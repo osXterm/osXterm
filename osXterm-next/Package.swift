@@ -25,7 +25,10 @@ let package = Package(
                 "OsXtermCore",
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
-            path: "Sources/OsXtermApp"
+            path: "Sources/OsXtermApp",
+            resources: [
+                .copy("Resources")
+            ]
         ),
         .executableTarget(name: "osXtermAskPass", dependencies: ["OsXtermCore"]),
         .executableTarget(name: "osXtermProxy", dependencies: ["OsXtermCore"]),

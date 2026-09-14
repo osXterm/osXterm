@@ -9,6 +9,7 @@ struct OsXtermApp: App {
     @NSApplicationDelegateAdaptor(OsXtermApplicationDelegate.self) private var applicationDelegate
 
     init() {
+        BundledTerminalFontRegistry.registerBundledFonts()
         let workspaceModel = AppWorkspaceModel(service: AppRuntime.makeWorkspaceService())
         ApplicationTerminationCoordinator.model = workspaceModel
         _model = StateObject(wrappedValue: workspaceModel)
@@ -45,6 +46,14 @@ struct OsXtermApp: App {
             }
 
             CommandMenu(AppText.string("Session", korean: "세션")) {
+                Button(AppText.string("Open Another SSH Session", korean: "같은 프로필로 SSH 세션 추가")) {
+                    if let profileID = model.selectedSession?.profileID {
+                        model.connect(profileID: profileID)
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(model.selectedSession?.profileID == nil || !model.isServiceAvailable)
+
                 Button(AppText.string("Close Tab", korean: "탭 닫기")) {
                     if let session = model.selectedSession {
                         model.closeSession(id: session.id)

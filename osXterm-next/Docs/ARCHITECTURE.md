@@ -41,7 +41,14 @@ SCP forces SFTP transport mode. Its process is retained by the transfer queue so
 
 `CoreWorkspaceService` runs on the main actor for coherent presentation state while SFTP's actor and process I/O do their work outside the SwiftUI rendering path. A terminal is not marked connected just because a child process launched: OpenSSH output must show successful authentication or an interactive channel. A tunnel listener is tracked separately from a destination probe result.
 
-Workspace restoration restores descriptors and layout metadata. It never restarts commands or macros and never represents a terminated remote shell as recovered. Broadcast input is empty by default and targets only explicitly checked ready sessions.
+Workspace restoration restores descriptors and layout metadata. It never restarts commands or macros and never represents a terminated remote shell as recovered. Every connect action creates an independent terminal session, so one profile can have multiple concurrent SSH processes. Broadcast input is empty by default. It activates only when the source session and at least one recipient are explicitly checked and ready, then mirrors the input to the other checked ready sessions.
+
+`TerminalFont` stores a bundled font's PostScript name. At app launch,
+`BundledTerminalFontRegistry` registers D2 Coding, JetBrains Mono, Fira Code,
+and Hack from the SwiftPM resource bundle. The terminal adapter resolves the
+chosen bundled font rather than looking it up in the user's font collection.
+`TerminalTheme` offers 20 fixed ANSI palettes, with System dynamically
+following the current macOS appearance.
 
 Session logging is disabled by default. When enabled, active and future terminal descriptors record to `Application Support/osXterm/Logs` with a mode-0700 directory and mode-0600 files. The visible export action first flushes the current file and then uses `SecureFileExporter` on a utility task to stage a private copy beside the user-selected destination before replacing that destination.
 

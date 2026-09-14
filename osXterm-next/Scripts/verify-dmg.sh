@@ -41,6 +41,25 @@ if ! lipo -archs "$installed_app/Contents/MacOS/osXterm" | tr ' ' '\n' | grep -F
     exit 1
 fi
 
+for bundled_resource in \
+    D2Coding-Regular.ttf \
+    D2Coding-Bold.ttf \
+    JetBrainsMono-Regular.ttf \
+    JetBrainsMono-Bold.ttf \
+    FiraCode-Regular.ttf \
+    FiraCode-Bold.ttf \
+    Hack-Regular.ttf \
+    Hack-Bold.ttf \
+    D2Coding-OFL-1.1.txt \
+    JetBrainsMono-OFL-1.1.txt \
+    FiraCode-OFL-1.1.txt \
+    Hack-LICENSE.md; do
+    if ! find "$installed_app/Contents/Resources" -type f -name "$bundled_resource" -print -quit | grep -q .; then
+        echo "The extracted app is missing bundled terminal resource: $bundled_resource" >&2
+        exit 1
+    fi
+done
+
 if [[ "${OSXTERM_VERIFY_PACKAGE_INTEGRATION:-1}" == "1" ]]; then
     OSXTERM_PROXY_HELPER="$installed_app/Contents/MacOS/osXtermProxy" \
     OSXTERM_ASKPASS_HELPER="$installed_app/Contents/MacOS/osXtermAskPass" \

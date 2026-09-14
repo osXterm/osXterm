@@ -1431,11 +1431,18 @@ final class CoreWorkspaceService: AppWorkspaceService {
         if session.descriptor.shouldLog {
             appendSessionLog(Data("[input \(Date())] ".utf8) + data, to: session)
         }
-        for targetID in broadcastTargetSessionIDs where targetID != sessionID {
-            guard sessions[targetID]?.state.isInputReady == true else { continue }
+        let readySessionIDs = Set(sessions.compactMap { id, candidate in
+            candidate.state.isInputReady ? id : nil
+        })
+        let recipients = BroadcastInputRouter.recipients(
+            sourceID: sessionID,
+            selectedSessionIDs: broadcastTargetSessionIDs,
+            readySessionIDs: readySessionIDs
+        )
+        for targetID in recipients {
             enqueueTerminalInput(data, to: targetID)
         }
-        if broadcastTargetSessionIDs.count > 1 {
+        if !recipients.isEmpty {
             emitSnapshot()
         }
     }
@@ -3553,7 +3560,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         }
         return AppSettingsPresentation(
             appearance: appearance,
-            terminalFontName: settings.terminalFontName,
+            terminalFontName: TerminalFont(persistedName: settings.terminalFontName).rawValue,
             terminalFontSize: settings.terminalFontSize,
             terminalLineSpacing: settings.terminalLineSpacing,
             terminalThemeName: settings.terminalThemeName,
@@ -3572,7 +3579,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         }
         return AppSettings(
             appearance: appearance,
-            terminalFontName: presentation.terminalFontName,
+            terminalFontName: TerminalFont(persistedName: presentation.terminalFontName).rawValue,
             terminalFontSize: presentation.terminalFontSize,
             terminalLineSpacing: presentation.terminalLineSpacing,
             terminalThemeName: TerminalTheme(persistedName: presentation.terminalThemeName).rawValue,

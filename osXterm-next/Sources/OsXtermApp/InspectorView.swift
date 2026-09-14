@@ -1032,8 +1032,8 @@ private struct ConnectionInspector: View {
             Label(AppText.string("Broadcast Input", korean: "동시 입력"), systemImage: "dot.radiowaves.left.and.right")
                 .font(.headline)
             Text(AppText.string(
-                "Input is sent only to checked, connected sessions. It is off by default.",
-                korean: "선택한 연결된 세션에만 입력을 보냅니다. 기본값은 꺼짐입니다."
+                "Choose at least two sessions. Input typed in any checked terminal is mirrored only to the other checked, connected sessions. It is off by default.",
+                korean: "세션을 두 개 이상 선택하세요. 선택한 터미널에서 입력한 내용은 선택한 다른 연결 세션에만 복제됩니다. 기본값은 꺼짐입니다."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -1052,6 +1052,36 @@ private struct ConnectionInspector: View {
                     .toggleStyle(.checkbox)
                     .disabled(!model.isServiceAvailable)
                     .accessibilityLabel(AppText.string("Broadcast to \(session.title)", korean: "\(session.title)에 동시 입력"))
+                }
+                let activeTargetCount = Set(eligibleSessions.map(\.id))
+                    .intersection(model.snapshot.broadcastTargetSessionIDs)
+                    .count
+                if activeTargetCount >= 2 {
+                    HStack {
+                        Label(
+                            AppText.string(
+                                "Broadcasting across \(activeTargetCount) sessions",
+                                korean: "\(activeTargetCount)개 세션에 동시 입력 중"
+                            ),
+                            systemImage: "dot.radiowaves.left.and.right"
+                        )
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+                        Spacer()
+                        Button(AppText.string("Turn Off", korean: "끄기")) {
+                            model.setBroadcastTargets([])
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(!model.isServiceAvailable)
+                        .accessibilityLabel(AppText.string("Turn off broadcast input", korean: "동시 입력 끄기"))
+                    }
+                } else if activeTargetCount == 1 {
+                    Text(AppText.string(
+                        "Select one more session before broadcast becomes active.",
+                        korean: "세션을 하나 더 선택하면 동시 입력이 활성화됩니다."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }

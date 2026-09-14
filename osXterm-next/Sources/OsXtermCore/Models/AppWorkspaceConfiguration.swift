@@ -21,7 +21,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public init(
         appearance: AppAppearance = .system,
-        terminalFontName: String = "SF Mono",
+        terminalFontName: String = "D2Coding",
         terminalFontSize: Double = 13,
         terminalLineSpacing: Double = 1,
         terminalThemeName: String = "System",

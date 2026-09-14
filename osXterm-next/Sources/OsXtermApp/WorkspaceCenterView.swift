@@ -342,6 +342,18 @@ private struct TerminalPaneView: View {
             }
             Spacer()
             SessionStateLabel(state: session.state)
+            if isBroadcastParticipant {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(.orange)
+                    .help(AppText.string(
+                        "Broadcast input is active for \(activeBroadcastParticipantCount) selected sessions",
+                        korean: "\(activeBroadcastParticipantCount)개 선택 세션에 동시 입력이 활성화되어 있습니다"
+                    ))
+                    .accessibilityLabel(AppText.string(
+                        "Broadcast input active",
+                        korean: "동시 입력 활성화됨"
+                    ))
+            }
             if session.isSessionLoggingEnabled {
                 Image(systemName: "record.circle")
                     .foregroundStyle(.secondary)
@@ -357,6 +369,20 @@ private struct TerminalPaneView: View {
             .help(AppText.string("Export Session Log", korean: "세션 로그 내보내기"))
             .accessibilityLabel(AppText.string("Export log for \(session.title)", korean: "\(session.title) 로그 내보내기"))
             .disabled(!session.hasSessionLog || !model.isServiceAvailable)
+            if let profileID = session.profileID, !session.isLocal {
+                Button {
+                    model.connect(profileID: profileID)
+                } label: {
+                    Image(systemName: "plus.rectangle.on.rectangle")
+                }
+                .buttonStyle(.borderless)
+                .help(AppText.string("Open Another SSH Session", korean: "같은 프로필로 SSH 세션 추가"))
+                .accessibilityLabel(AppText.string(
+                    "Open another SSH session for \(session.title)",
+                    korean: "\(session.title) 프로필로 SSH 세션 추가"
+                ))
+                .disabled(!model.isServiceAvailable)
+            }
             if session.state.isInputReady {
                 Button {
                     model.disconnect(sessionID: session.id)
@@ -392,6 +418,20 @@ private struct TerminalPaneView: View {
             return process
         }
         return session.accessibilityState
+    }
+
+    private var activeBroadcastParticipantCount: Int {
+        let readySessionIDs = Set(model.snapshot.sessions.compactMap { candidate in
+            candidate.state.isInputReady && !candidate.isReadOnly ? candidate.id : nil
+        })
+        return readySessionIDs
+            .intersection(model.snapshot.broadcastTargetSessionIDs)
+            .count
+    }
+
+    private var isBroadcastParticipant: Bool {
+        activeBroadcastParticipantCount >= 2
+            && model.snapshot.broadcastTargetSessionIDs.contains(session.id)
     }
 
     private func chooseSessionLogExport() {

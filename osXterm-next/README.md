@@ -9,7 +9,8 @@ The app uses SwiftUI and AppKit, SwiftTerm 1.19.0 for its PTY-backed terminal su
 - Direct SSH and local shell tabs, reconnect policy, host-key review, app-managed `known_hosts`, and per-session AskPass IPC.
 - Ordered jump paths, HTTP CONNECT and SOCKS5 proxies with optional credentials, and one shared route compiler for terminals, SFTP, SCP, and tunnels.
 - Local, remote, dynamic, remote dynamic, local Unix-socket, and remote Unix-socket forwarding. The tunnel panel keeps listener creation and destination checks separate: local TCP and Unix checks connect through the listener, while remote forwarding checks the local destination separately. Independent tunnels remain visible in the menu bar and are stopped during confirmed app shutdown.
-- A SwiftTerm terminal bridge with tabs, two-pane layouts, Unicode input, paste protection for OSC 52, user-controlled logs, session-log export to a user-selected local file with private permissions, and broadcast input that is off by default. Its System, Midnight, Solarized Dark, and Solarized Light settings apply foreground, background, selection, cursor, and ANSI palette colors through the terminal adapter.
+- A SwiftTerm terminal bridge with tabs, two-pane layouts, Unicode input, paste protection for OSC 52, user-controlled logs, session-log export to a user-selected local file with private permissions, and broadcast input that is off by default. A profile can open more than one independent SSH session. Broadcast only mirrors input among explicitly checked ready sessions. Twenty terminal themes apply foreground, background, selection, cursor, and ANSI palette colors through the terminal adapter.
+- The terminal typography picker offers four bundled open-license fonts: D2 Coding, JetBrains Mono, Fira Code, and Hack. The default D2 Coding includes Korean glyph coverage. The font files and licenses are app resources, so this setting does not depend on the user's installed macOS font collection.
 - Structured SFTP v3 browsing and transfer operations. Directory listings do not parse `ls` output. The inspector supports direct remote-path entry, folder navigation, upload, download, recursive directory work, symlinks, permissions, selectable overwrite/skip/rename behavior, cancellation, and retry through the transfer queue. Single-file SFTP retries verify source metadata and the already transferred SHA-256 prefix before resuming a partial destination.
 - Remote regular files can open as app-managed local editing copies. Editor saves remain local until the user explicitly selects Save to Remote, which fails closed if the remote source changed.
 - SCP upload and download use the same generated route and credential policy as SFTP. osXterm forces SCP's SFTP transport mode and rejects unsafe legacy-SCP remote paths.
@@ -35,7 +36,7 @@ Scripts/package-app.sh
 open .build/app/osXterm.app
 ```
 
-The package script produces an arm64 `osXterm.app` with `osXtermAskPass`, `osXtermProxy`, icon resources, SwiftPM resources, and third-party notices. It signs the bundle ad hoc with `codesign --sign -`.
+The package script produces an arm64 `osXterm.app` with `osXtermAskPass`, `osXtermProxy`, icon resources, bundled terminal fonts and licenses in the SwiftPM resource bundle, and third-party notices. It signs the bundle ad hoc with `codesign --sign -`.
 
 Create the local installer image with:
 
@@ -56,6 +57,10 @@ Scripts/verify.sh
 ```
 
 The verifier resolves the exact dependency graph, runs unit tests, creates ephemeral SSH credentials, starts the loopback-only Docker Compose fixture, runs core route and transfer integration cases, packages the app, creates the DMG, copies the app from the mounted image to a separate temporary path, verifies its ad-hoc signature and arm64 executable, and repeats the integration path with the packaged helpers.
+
+`Scripts/verify-font-resources.sh` independently checks the checked-in font
+hashes, license files, and Core Text PostScript-name registration. The complete
+verifier runs it before resolving the package graph.
 
 The fixture covers direct, one-hop, and two-hop routes, proxy-only and proxy-plus-jump routes, HTTP Basic and SOCKS5 user/password proxy authentication, password, encrypted key, agent, certificate, and keyboard-interactive SSH authentication, structured SFTP and SCP transfers, a 100 MiB SFTP resume with source metadata and prefix SHA-256 verification, port collisions, server forwarding rejection, TCP forwarding, SOCKS forwarding, Unix sockets, and remote auto-assigned ports. It only exposes service ports on `127.0.0.1`.
 

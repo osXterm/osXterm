@@ -9,6 +9,7 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
     export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 
+"$project_dir/Scripts/verify-font-resources.sh"
 swift package resolve
 swift test --parallel
 "$project_dir/Scripts/run-integration-tests.sh"

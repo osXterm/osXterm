@@ -37,8 +37,8 @@ struct AboutView: View {
                 Text(AppText.string("Licenses", korean: "라이선스"))
                     .font(.headline)
                 Text(AppText.string(
-                    "osXterm is distributed under the MIT License. It includes SwiftTerm 1.19.0 under its included third-party notice.",
-                    korean: "osXterm은 MIT License로 배포됩니다. SwiftTerm 1.19.0의 제3자 고지가 앱에 포함됩니다."
+                    "osXterm is distributed under the MIT License. It includes SwiftTerm 1.19.0 and bundled terminal-font notices in its third-party resources.",
+                    korean: "osXterm은 MIT License로 배포됩니다. SwiftTerm 1.19.0과 번들 터미널 글꼴의 제3자 고지가 앱 리소스에 포함됩니다."
                 ))
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)

@@ -34,6 +34,25 @@ find "$bin_dir" -maxdepth 1 -type d -name '*.bundle' -print0 | while IFS= read -
     cp -R "$bundle" "$resources_dir/"
 done
 
+for bundled_resource in \
+    D2Coding-Regular.ttf \
+    D2Coding-Bold.ttf \
+    JetBrainsMono-Regular.ttf \
+    JetBrainsMono-Bold.ttf \
+    FiraCode-Regular.ttf \
+    FiraCode-Bold.ttf \
+    Hack-Regular.ttf \
+    Hack-Bold.ttf \
+    D2Coding-OFL-1.1.txt \
+    JetBrainsMono-OFL-1.1.txt \
+    FiraCode-OFL-1.1.txt \
+    Hack-LICENSE.md; do
+    if ! find "$resources_dir" -type f -name "$bundled_resource" -print -quit | grep -q .; then
+        echo "Packaged app is missing bundled terminal resource: $bundled_resource" >&2
+        exit 1
+    fi
+done
+
 if [[ -f "$project_dir/.build/checkouts/SwiftTerm/LICENSE" ]]; then
     mkdir -p "$resources_dir/THIRD_PARTY_NOTICES"
     install -m 644 "$project_dir/.build/checkouts/SwiftTerm/LICENSE" "$resources_dir/THIRD_PARTY_NOTICES/SwiftTerm-LICENSE.txt"

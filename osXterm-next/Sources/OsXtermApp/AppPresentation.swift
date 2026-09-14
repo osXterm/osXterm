@@ -336,7 +336,7 @@ struct AppSettingsPresentation: Equatable {
 
     static let `default` = AppSettingsPresentation(
         appearance: .system,
-        terminalFontName: "SF Mono",
+        terminalFontName: TerminalFont.preferredDefault.rawValue,
         terminalFontSize: 13,
         terminalLineSpacing: 1,
         terminalThemeName: "System",
@@ -354,17 +354,54 @@ enum TerminalTheme: String, CaseIterable, Identifiable {
     case midnight = "Midnight"
     case solarizedDark = "Solarized Dark"
     case solarizedLight = "Solarized Light"
+    case dracula = "Dracula"
+    case nord = "Nord"
+    case gruvboxDark = "Gruvbox Dark"
+    case gruvboxLight = "Gruvbox Light"
+    case catppuccinMocha = "Catppuccin Mocha"
+    case catppuccinLatte = "Catppuccin Latte"
+    case tokyoNight = "Tokyo Night"
+    case tokyoNightStorm = "Tokyo Night Storm"
+    case monokaiPro = "Monokai Pro"
+    case oneDark = "One Dark"
+    case githubDark = "GitHub Dark"
+    case githubLight = "GitHub Light"
+    case rosePine = "Rosé Pine"
+    case everforestDark = "Everforest Dark"
+    case ayuMirage = "Ayu Mirage"
+    case kanagawaWave = "Kanagawa Wave"
 
     var id: String { rawValue }
 
     init(persistedName: String) {
-        switch persistedName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        let normalized = persistedName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let theme = Self.allCases.first(where: { $0.rawValue.lowercased() == normalized }) {
+            self = theme
+            return
+        }
+        switch normalized {
         case "midnight":
             self = .midnight
         case "solarized dark", "solarized-dark", "solarizeddark":
             self = .solarizedDark
         case "solarized light", "solarized-light", "solarizedlight":
             self = .solarizedLight
+        case "catppuccin-mocha", "catppuccinmocha":
+            self = .catppuccinMocha
+        case "catppuccin-latte", "catppuccinlatte":
+            self = .catppuccinLatte
+        case "tokyo-night", "tokyonight":
+            self = .tokyoNight
+        case "tokyo-night-storm", "tokyonightstorm":
+            self = .tokyoNightStorm
+        case "rose pine", "rose-pine", "rosepine":
+            self = .rosePine
+        case "everforest", "everforest-dark":
+            self = .everforestDark
+        case "ayu", "ayu-mirage":
+            self = .ayuMirage
+        case "kanagawa", "kanagawa-wave":
+            self = .kanagawaWave
         default:
             self = .system
         }
@@ -380,6 +417,69 @@ enum TerminalTheme: String, CaseIterable, Identifiable {
             AppText.string("Solarized Dark", korean: "Solarized 다크")
         case .solarizedLight:
             AppText.string("Solarized Light", korean: "Solarized 라이트")
+        default:
+            rawValue
+        }
+    }
+}
+
+/// Curated fonts that ship inside osXterm. Their raw values are the verified
+/// Core Text PostScript names, so saved settings do not depend on the user's
+/// installed font collection.
+enum TerminalFont: String, CaseIterable, Identifiable {
+    case d2Coding = "D2Coding"
+    case jetBrainsMono = "JetBrainsMono-Regular"
+    case firaCode = "FiraCode-Regular"
+    case hack = "Hack-Regular"
+
+    static let preferredDefault = TerminalFont.d2Coding
+
+    var id: String { rawValue }
+    var regularPostScriptName: String { rawValue }
+
+    var boldPostScriptName: String {
+        switch self {
+        case .d2Coding: "D2CodingBold"
+        case .jetBrainsMono: "JetBrainsMono-Bold"
+        case .firaCode: "FiraCode-Bold"
+        case .hack: "Hack-Bold"
+        }
+    }
+
+    var resourceFileNames: [String] {
+        switch self {
+        case .d2Coding: ["D2Coding-Regular.ttf", "D2Coding-Bold.ttf"]
+        case .jetBrainsMono: ["JetBrainsMono-Regular.ttf", "JetBrainsMono-Bold.ttf"]
+        case .firaCode: ["FiraCode-Regular.ttf", "FiraCode-Bold.ttf"]
+        case .hack: ["Hack-Regular.ttf", "Hack-Bold.ttf"]
+        }
+    }
+
+    init(persistedName: String) {
+        switch persistedName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "d2coding", "d2 coding", "sf mono", "sfmono":
+            self = .d2Coding
+        case "jetbrainsmono", "jetbrains mono", "jetbrainsmono-regular":
+            self = .jetBrainsMono
+        case "firacode", "fira code", "firacode-regular":
+            self = .firaCode
+        case "hack", "hack-regular":
+            self = .hack
+        default:
+            self = .preferredDefault
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .d2Coding:
+            AppText.string("D2 Coding", korean: "D2 Coding 한글")
+        case .jetBrainsMono:
+            "JetBrains Mono"
+        case .firaCode:
+            "Fira Code"
+        case .hack:
+            "Hack"
         }
     }
 }

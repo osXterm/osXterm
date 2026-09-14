@@ -82,9 +82,18 @@ struct SettingsView: View {
     private var terminalSettings: some View {
         Form {
             Section(AppText.string("Typography", korean: "글꼴")) {
-                TextField(AppText.string("Font", korean: "글꼴"), text: $draft.terminalFontName)
-                    .textFieldStyle(.roundedBorder)
+                Picker(AppText.string("Font", korean: "글꼴"), selection: terminalFont) {
+                    ForEach(TerminalFont.allCases) { font in
+                        Text(font.displayName).tag(font)
+                    }
+                }
                     .accessibilityLabel(AppText.string("Terminal font", korean: "터미널 글꼴"))
+                Text(AppText.string(
+                    "osXterm includes these terminal fonts in the app and does not use the macOS font collection for this setting.",
+                    korean: "이 터미널 글꼴은 osXterm 앱에 포함되어 있으며, 이 설정에서는 macOS 글꼴 목록을 사용하지 않습니다."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 HStack {
                     Text(AppText.string("Font Size", korean: "글꼴 크기"))
                     Slider(value: $draft.terminalFontSize, in: 9 ... 28, step: 1)
@@ -109,8 +118,8 @@ struct SettingsView: View {
                 }
                     .accessibilityLabel(AppText.string("Terminal theme", korean: "터미널 테마"))
                 Text(AppText.string(
-                    "System follows the current macOS appearance. The other themes include their own ANSI palette.",
-                    korean: "시스템은 현재 macOS 모양을 따릅니다. 나머지 테마에는 전용 ANSI 팔레트가 포함됩니다."
+                    "System follows the current macOS appearance. The other 19 built-in themes include their own ANSI palette.",
+                    korean: "시스템은 현재 macOS 모양을 따릅니다. 나머지 19개 내장 테마에는 전용 ANSI 팔레트가 포함됩니다."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -150,9 +159,15 @@ struct SettingsView: View {
     }
 
     private var isValid: Bool {
-        !draft.terminalFontName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (9 ... 28).contains(draft.terminalFontSize)
+        (9 ... 28).contains(draft.terminalFontSize)
             && (1 ... 1.6).contains(draft.terminalLineSpacing)
+    }
+
+    private var terminalFont: Binding<TerminalFont> {
+        Binding(
+            get: { TerminalFont(persistedName: draft.terminalFontName) },
+            set: { draft.terminalFontName = $0.rawValue }
+        )
     }
 
     private var terminalTheme: Binding<TerminalTheme> {
