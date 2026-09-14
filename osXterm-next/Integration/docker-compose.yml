@@ -1,0 +1,109 @@
+services:
+  ssh1:
+    build:
+      context: ./ssh
+    environment:
+      ALLOW_TCP_FORWARDING: "yes"
+    volumes:
+      - ./fixtures/authorized_keys:/home/osxterm/.ssh/authorized_keys:ro
+      - ./fixtures/trusted_user_ca_keys:/home/osxterm/.ssh/trusted_user_ca_keys:ro
+    ports:
+      - "127.0.0.1:2222:2222"
+    networks: [osxterm-test]
+
+  ssh2:
+    build:
+      context: ./ssh
+    environment:
+      ALLOW_TCP_FORWARDING: "yes"
+    volumes:
+      - ./fixtures/authorized_keys:/home/osxterm/.ssh/authorized_keys:ro
+      - ./fixtures/trusted_user_ca_keys:/home/osxterm/.ssh/trusted_user_ca_keys:ro
+    ports:
+      - "127.0.0.1:2223:2222"
+    networks: [osxterm-test]
+
+  target:
+    build:
+      context: ./ssh
+    environment:
+      ALLOW_TCP_FORWARDING: "yes"
+    volumes:
+      - ./fixtures/authorized_keys:/home/osxterm/.ssh/authorized_keys:ro
+      - ./fixtures/trusted_user_ca_keys:/home/osxterm/.ssh/trusted_user_ca_keys:ro
+    ports:
+      - "127.0.0.1:2224:2222"
+    networks: [osxterm-test]
+
+  restricted-target:
+    build:
+      context: ./ssh
+    environment:
+      ALLOW_TCP_FORWARDING: "no"
+    volumes:
+      - ./fixtures/authorized_keys:/home/osxterm/.ssh/authorized_keys:ro
+      - ./fixtures/trusted_user_ca_keys:/home/osxterm/.ssh/trusted_user_ca_keys:ro
+    ports:
+      - "127.0.0.1:2225:2222"
+    networks: [osxterm-test]
+
+  certificate-target:
+    build:
+      context: ./ssh
+    environment:
+      ALLOW_TCP_FORWARDING: "yes"
+      ALLOW_AUTHORIZED_KEYS: "no"
+    volumes:
+      - ./fixtures/trusted_user_ca_keys:/home/osxterm/.ssh/trusted_user_ca_keys:ro
+    ports:
+      - "127.0.0.1:2226:2222"
+    networks: [osxterm-test]
+
+  http-proxy:
+    build:
+      context: ./proxy
+    command: ["http"]
+    ports:
+      - "127.0.0.1:3128:3128"
+    networks: [osxterm-test]
+
+  socks-proxy:
+    build:
+      context: ./proxy
+    command: ["socks5"]
+    ports:
+      - "127.0.0.1:1080:1080"
+    networks: [osxterm-test]
+
+  http-proxy-auth:
+    build:
+      context: ./proxy
+    command: ["http"]
+    environment:
+      PROXY_USERNAME: osxterm-proxy
+      PROXY_PASSWORD: integration-proxy-password
+    ports:
+      - "127.0.0.1:3129:3128"
+    networks: [osxterm-test]
+
+  socks-proxy-auth:
+    build:
+      context: ./proxy
+    command: ["socks5"]
+    environment:
+      PROXY_USERNAME: osxterm-proxy
+      PROXY_PASSWORD: integration-proxy-password
+    ports:
+      - "127.0.0.1:1081:1080"
+    networks: [osxterm-test]
+
+  tcp-echo:
+    build:
+      context: ./echo
+    ports:
+      - "127.0.0.1:18080:9000"
+    networks: [osxterm-test]
+
+networks:
+  osxterm-test:
+    driver: bridge

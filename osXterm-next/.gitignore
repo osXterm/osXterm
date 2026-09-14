@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+dist/
+*.xcarchive
+*.dmg
+*.xcuserstate
+xcuserdata/
+Integration/fixtures/*
+!Integration/fixtures/.gitkeep

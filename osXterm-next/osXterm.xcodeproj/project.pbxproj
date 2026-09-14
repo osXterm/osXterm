@@ -1,0 +1,230 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A11A00000000000000000001 /* osXterm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = osXterm.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A11A00000000000000000002 /* osXtermCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = osXtermCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		A11A00000000000000000003 = {
+			isa = PBXGroup;
+			children = (
+				A11A00000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A11A00000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A11A00000000000000000001 /* osXterm.app */,
+				A11A00000000000000000002 /* osXtermCoreTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A11A00000000000000000005 /* osXterm */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A11A00000000000000000006 /* Build configuration list for PBXNativeTarget "osXterm" */;
+			buildPhases = (
+				A11A00000000000000000007 /* Build fixed Swift package app */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = osXterm;
+			productName = osXterm;
+			productReference = A11A00000000000000000001 /* osXterm.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A11A00000000000000000008 /* osXtermCoreTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A11A00000000000000000009 /* Build configuration list for PBXNativeTarget "osXtermCoreTests" */;
+			buildPhases = (
+				A11A00000000000000000010 /* Run fixed Swift package tests */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = osXtermCoreTests;
+			productName = osXtermCoreTests;
+			productReference = A11A00000000000000000002 /* osXtermCoreTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A11A00000000000000000011 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A11A00000000000000000005 = { CreatedOnToolsVersion = 26.0; };
+					A11A00000000000000000008 = { CreatedOnToolsVersion = 26.0; TestTargetID = A11A00000000000000000005; };
+				};
+			};
+			buildConfigurationList = A11A00000000000000000012 /* Build configuration list for PBXProject "osXterm" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, ko, Base);
+			mainGroup = A11A00000000000000000003;
+			productRefGroup = A11A00000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A11A00000000000000000005 /* osXterm */,
+				A11A00000000000000000008 /* osXtermCoreTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A11A00000000000000000007 /* Build fixed Swift package app */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputFileListPaths = ();
+			inputPaths = ("$(SRCROOT)/Package.swift", "$(SRCROOT)/Package.resolved");
+			name = "Build fixed Swift package app";
+			outputFileListPaths = ();
+			outputPaths = ("$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)");
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\n\"$(SRCROOT)/Scripts/package-app.sh\"\nrm -rf \"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)\"\nditto \"$(SRCROOT)/.build/app/osXterm.app\" \"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)\"\n";
+		};
+		A11A00000000000000000010 /* Run fixed Swift package tests */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputFileListPaths = ();
+			inputPaths = ("$(SRCROOT)/Package.swift", "$(SRCROOT)/Package.resolved");
+			name = "Run fixed Swift package tests";
+			outputFileListPaths = ();
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\ncd \"$(SRCROOT)\"\nswift test --parallel\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A11A00000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A11A00000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A11A00000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.osxterm.next;
+				PRODUCT_NAME = osXterm;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A11A00000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.osxterm.next;
+				PRODUCT_NAME = osXterm;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A11A00000000000000000017 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.osxterm.client.tests;
+				PRODUCT_NAME = osXtermCoreTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A11A00000000000000000018 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.osxterm.client.tests;
+				PRODUCT_NAME = osXtermCoreTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A11A00000000000000000006 /* Build configuration list for PBXNativeTarget "osXterm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A11A00000000000000000015 /* Debug */, A11A00000000000000000016 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A11A00000000000000000009 /* Build configuration list for PBXNativeTarget "osXtermCoreTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A11A00000000000000000017 /* Debug */, A11A00000000000000000018 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A11A00000000000000000012 /* Build configuration list for PBXProject "osXterm" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A11A00000000000000000013 /* Debug */, A11A00000000000000000014 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A11A00000000000000000011 /* Project object */;
+}
