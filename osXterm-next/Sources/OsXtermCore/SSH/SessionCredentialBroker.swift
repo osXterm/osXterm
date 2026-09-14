@@ -50,6 +50,7 @@ public enum CredentialBrokerError: Error, Equatable, Sendable {
     case socketBindFailed(Int32)
     case socketPermissionFailed(Int32)
     case socketListenFailed(Int32)
+    case socketConfigurationFailed(Int32)
     case socketConnectFailed(Int32)
     case socketReadFailed(Int32)
     case socketWriteFailed(Int32)
@@ -79,6 +80,8 @@ extension CredentialBrokerError: LocalizedError {
             "Could not secure credential broker socket permissions (errno \(status))."
         case let .socketListenFailed(status):
             "Could not listen on credential broker socket (errno \(status))."
+        case let .socketConfigurationFailed(status):
+            "Could not configure credential broker socket (errno \(status))."
         case let .socketConnectFailed(status):
             "Could not connect to credential broker socket (errno \(status))."
         case let .socketReadFailed(status):
@@ -252,6 +255,15 @@ public final class SessionCredentialBroker: @unchecked Sendable {
                 }
                 return
             }
+            // The listening socket is nonblocking so this loop can drain it.
+            // Accepted sockets may inherit that flag, but a framed request is
+            // written in more than one syscall. Handle each client on a
+            // blocking worker socket so a partial request cannot be mistaken
+            // for an unavailable credential.
+            guard Self.prepareConnectedSocket(client) else {
+                Darwin.close(client)
+                continue
+            }
             workerQueue.async { [weak self] in
                 self?.handle(client: client)
             }
@@ -319,6 +331,28 @@ public final class SessionCredentialBroker: @unchecked Sendable {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    fileprivate static func prepareConnectedSocket(_ fileDescriptor: Int32) -> Bool {
+        let flags = Darwin.fcntl(fileDescriptor, F_GETFL)
+        guard flags >= 0 else {
+            return false
+        }
+        if flags & O_NONBLOCK != 0,
+           Darwin.fcntl(fileDescriptor, F_SETFL, flags & ~O_NONBLOCK) != 0 {
+            return false
+        }
+
+        var enabled: Int32 = 1
+        return withUnsafePointer(to: &enabled) { pointer in
+            Darwin.setsockopt(
+                fileDescriptor,
+                SOL_SOCKET,
+                SO_NOSIGPIPE,
+                pointer,
+                socklen_t(MemoryLayout<Int32>.size)
+            ) == 0
+        }
     }
 
     static func isSafeSocketPath(_ path: String) -> Bool {
@@ -479,6 +513,9 @@ public enum CredentialBrokerClient {
         }
         defer {
             Darwin.close(descriptor)
+        }
+        guard SessionCredentialBroker.prepareConnectedSocket(descriptor) else {
+            throw CredentialBrokerError.socketConfigurationFailed(errno)
         }
 
         var address = try SessionCredentialBroker.socketAddress(path: socketPath)
