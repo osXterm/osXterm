@@ -78,7 +78,7 @@ Read [Docs/TESTING.md](Docs/TESTING.md) before treating a release as verified. T
 
 - `OsXtermCore` resolves a route once and generates a mode-0600 OpenSSH configuration for that route.
 - The app, SFTP subsystem, SCP process, and tunnel process consume that one route configuration.
-- `osXtermAskPass` and `osXtermProxy` obtain session-only credentials through a mode-0700 Unix-domain-socket broker with a random token.
+- `osXtermAskPass` and `osXtermProxy` obtain session-only credentials through a mode-0700 Unix-domain-socket broker with a random token. Their paths resolve only inside the app bundle or beside a SwiftPM development executable, and a missing AskPass helper fails closed before OpenSSH starts.
 - Runtime messages are sanitized before being shown as errors. Logs are opt-in, stored under Application Support with mode 0600, and exported through a staged private-file copy only after the user chooses a destination.
 
 ## Current known limitations

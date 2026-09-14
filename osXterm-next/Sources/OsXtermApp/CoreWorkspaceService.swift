@@ -2030,7 +2030,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
                 launchID: UUID(),
                 executable: prepared.invocation.executableURL.path,
                 arguments: prepared.invocation.arguments,
-                environment: terminalEnvironment(overrides: askPassEnvironment(broker: broker)),
+                environment: terminalEnvironment(overrides: try askPassEnvironment(broker: broker)),
                 currentDirectory: FileManager.default.homeDirectoryForCurrentUser.path
             )
         } catch {
@@ -2110,27 +2110,30 @@ final class CoreWorkspaceService: AppWorkspaceService {
         )
     }
 
-    private func askPassEnvironment(broker: SessionCredentialBroker) -> [String: String] {
+    private func askPassEnvironment(broker: SessionCredentialBroker) throws -> [String: String] {
         [
-            "SSH_ASKPASS": (try? helperExecutableURL(named: "osXtermAskPass").path) ?? "",
+            "SSH_ASKPASS": try helperExecutableURL(named: "osXtermAskPass").path,
             "SSH_ASKPASS_REQUIRE": "force",
             "DISPLAY": "osxterm:0",
             "OSXTERM_ASKPASS_SOCKET": broker.socketPath,
             "OSXTERM_ASKPASS_TOKEN": broker.token
-        ].filter { !$0.value.isEmpty }
+        ]
     }
 
     private func helperExecutableURL(named name: String) throws -> URL {
         let executablePath = CommandLine.arguments.first ?? ""
-        let executableDirectory = URL(fileURLWithPath: executablePath).deletingLastPathComponent()
-        let candidates = [
-            Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/\(name)"),
-            executableDirectory.appendingPathComponent(name)
-        ]
-        guard let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+        guard !executablePath.isEmpty else {
             throw CoreWorkspaceServiceError.helperUnavailable(name)
         }
-        return found
+        do {
+            return try PackagedHelperLocator.locate(
+                named: name,
+                bundleURL: Bundle.main.bundleURL,
+                executableURL: URL(fileURLWithPath: executablePath)
+            )
+        } catch {
+            throw CoreWorkspaceServiceError.helperUnavailable(name)
+        }
     }
 
     private func terminalEnvironment(overrides: [String: String]) -> [String] {
@@ -2193,7 +2196,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             )
             let transport = try SFTPProcessTransport(
                 preparedCommand: prepared,
-                environment: processEnvironment(overrides: askPassEnvironment(broker: broker)),
+                environment: processEnvironment(overrides: try askPassEnvironment(broker: broker)),
                 diagnosticsHandler: { [weak self] text in
                     Task { @MainActor [weak self] in
                         guard let self, let managed = self.sessions[sessionID] else { return }
@@ -2524,7 +2527,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             let error = Pipe()
             process.executableURL = prepared.invocation.executableURL
             process.arguments = arguments
-            process.environment = processEnvironment(overrides: askPassEnvironment(broker: broker))
+            process.environment = processEnvironment(overrides: try askPassEnvironment(broker: broker))
             process.standardOutput = output
             process.standardError = error
             output.fileHandleForReading.readabilityHandler = { handle in
@@ -3177,7 +3180,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             let standardError = Pipe()
             process.executableURL = prepared.invocation.executableURL
             process.arguments = prepared.invocation.arguments
-            process.environment = processEnvironment(overrides: askPassEnvironment(broker: broker))
+            process.environment = processEnvironment(overrides: try askPassEnvironment(broker: broker))
             process.standardOutput = standardOutput
             process.standardError = standardError
             standardOutput.fileHandleForReading.readabilityHandler = { handle in

@@ -29,6 +29,8 @@ No UI view independently combines profile data into a shell command. The only st
 
 Profiles and exports contain `SecretReference` values only. `KeychainSecretStore` uses macOS Keychain for password, passphrase, interactive-secret, and proxy-secret values. At launch, `SessionCredentialBroker` copies only matching values into memory and creates a random-token Unix-domain socket inside a mode-0700 directory. The socket itself is mode 0600. Helpers receive its path and token, never an actual credential.
 
+AskPass and proxy helpers are resolved only from `Contents/MacOS` in the app bundle or beside the SwiftPM development executable. The app never searches the user's PATH. If AskPass is missing, terminal, SFTP, SCP, and tunnel startup fail before OpenSSH can run without the broker.
+
 The app owns `Application Support/osXterm/known_hosts`. First contact is presented to the user through AskPass before `yes` is returned. A changed key produces a separate replacement flow that removes the old endpoint only after explicit approval. SFTP requires a known key once an SSH terminal has established trust.
 
 ## Transfer boundary
