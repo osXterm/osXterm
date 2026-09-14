@@ -1,4 +1,5 @@
 import Foundation
+import OsXtermCore
 
 // MARK: - UI-facing values
 
@@ -259,6 +260,7 @@ struct TunnelPresentation: Identifiable, Hashable {
     var bindAddress: String
     var listeningEndpoint: String?
     var destination: String?
+    var destinationReachability: TunnelDestinationReachability
     var phase: TunnelPhasePresentation
     var sessionID: UUID?
     var isIndependent: Bool

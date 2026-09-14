@@ -39,7 +39,7 @@ Expected integration coverage:
 - password, encrypted private-key, SSH agent, OpenSSH certificate, and keyboard-interactive authentication;
 - SFTP v3 Unicode and quoted file names, SFTP-backed SCP upload/download, and a 100 MiB partial-file resume that verifies source metadata, the partial prefix SHA-256, and the final streamed SHA-256 digest;
 - local, remote, dynamic, remote dynamic, local Unix-socket, remote Unix-socket, remote port zero, port conflict, and server forwarding denial;
-- data echo through each listener instead of process-launch inference.
+- data echo through each listener instead of process-launch inference, plus destination probes through local TCP and Unix listeners.
 
 ## Required human pass
 
@@ -51,6 +51,6 @@ Do not record a release as passing from unit tests alone. A running SSH process 
 
 - Core, app, helper, and integration-runner source typechecks passed with the installed Xcode toolchain.
 - Swift test source syntax, shell script syntax, Compose YAML, Info.plist, icon container, and proxy Python syntax passed local static validation.
-- A manually linked Swift Testing runner executed all 39 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange. This is supplemental evidence only; the supported `swift test` gate remains unverified.
+- A manually linked Swift Testing runner executed all 42 core tests outside the seatbelt sandbox, including the credential-broker Unix socket exchange plus live loopback TCP and Unix socket destination probes. This is supplemental evidence only; the supported `swift test` gate remains unverified.
 - The fixture credential preparation script ran and produced ignored test-only keys plus a valid user certificate.
 - Full `swift test`, Compose integration, package build, DMG extraction, and UI pass are unverified in this workspace. Xcode reports an unaccepted license and Docker is not installed.

@@ -683,6 +683,7 @@ struct OsXtermIntegrationRunner {
             tunnel: localTunnel,
             label: "local forwarding"
         )
+        try await assertDestinationProbe(rule: local, label: "local forwarding")
 
         let duplicate = ForwardingRule(
             name: "integration local conflict",
@@ -732,6 +733,7 @@ struct OsXtermIntegrationRunner {
             tunnel: localSocketTunnel,
             label: "local Unix socket forwarding"
         )
+        try await assertDestinationProbe(rule: localSocket, label: "local Unix socket forwarding")
 
         let remote = ForwardingRule(
             name: "integration remote",
@@ -931,6 +933,19 @@ struct OsXtermIntegrationRunner {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         throw IntegrationRunnerError.assertionFailed("\(label) kept running instead of reporting its failure.")
+    }
+
+    private static func assertDestinationProbe(
+        rule: ForwardingRule,
+        assignedPort: Int? = nil,
+        label: String
+    ) async throws {
+        guard let target = TunnelDestinationProbe.target(for: rule, assignedPort: assignedPort) else {
+            throw IntegrationRunnerError.assertionFailed("\(label) did not provide a probeable destination.")
+        }
+        guard await TunnelDestinationProbe.probe(target) == .reachable else {
+            throw IntegrationRunnerError.assertionFailed("\(label) listener did not reach its configured destination.")
+        }
     }
 
     private static func waitForAllocatedPort(

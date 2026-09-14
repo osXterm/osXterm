@@ -391,6 +391,12 @@ final class AppWorkspaceModel: ObservableObject {
         }
     }
 
+    func probeTunnelDestination(id: UUID) {
+        perform(title: AppText.string("Could not test tunnel destination", korean: "터널 대상에 연결할 수 없습니다")) { [service] in
+            try await service.probeTunnelDestination(id: id)
+        }
+    }
+
     func runSnippet(id: UUID, on sessionIDs: Set<UUID>, values: [UUID: String] = [:]) {
         perform(title: AppText.string("Could not run snippet", korean: "스니펫을 실행할 수 없습니다")) { [service] in
             try await service.runSnippet(id: id, on: sessionIDs, values: values)

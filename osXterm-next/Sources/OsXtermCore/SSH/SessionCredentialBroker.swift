@@ -364,7 +364,7 @@ public final class SessionCredentialBroker: @unchecked Sendable {
             && path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path)
     }
 
-    fileprivate static func socketAddress(path: String) throws -> sockaddr_un {
+    static func socketAddress(path: String) throws -> sockaddr_un {
         guard isSafeSocketPath(path) else {
             throw CredentialBrokerError.invalidSocketPath
         }

@@ -688,6 +688,7 @@ private struct TunnelInspector: View {
                             onStart: { model.startTunnel(id: tunnel.id) },
                             onStop: { model.stopTunnel(id: tunnel.id) },
                             onRestart: { model.restartTunnel(id: tunnel.id) },
+                            onProbe: { model.probeTunnelDestination(id: tunnel.id) },
                             onEdit: { model.editTunnel(tunnel) },
                             onDelete: { tunnelPendingDeletion = tunnel },
                             isEnabled: model.isServiceAvailable
@@ -720,6 +721,7 @@ private struct TunnelRow: View {
     let onStart: () -> Void
     let onStop: () -> Void
     let onRestart: () -> Void
+    let onProbe: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     let isEnabled: Bool
@@ -736,6 +738,10 @@ private struct TunnelRow: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+            TunnelDestinationLabel(
+                reachability: tunnel.destinationReachability,
+                direction: tunnel.direction
+            )
             HStack(spacing: 10) {
                 if tunnel.isIndependent {
                     Label(AppText.string("Independent", korean: "독립 실행"), systemImage: "menubar.rectangle")
@@ -744,6 +750,7 @@ private struct TunnelRow: View {
                 }
                 Spacer()
                 controlButton
+                probeButton
                 Menu {
                     Button(AppText.edit, action: onEdit)
                     Button(AppText.string("Restart", korean: "다시 시작"), action: onRestart)
@@ -774,6 +781,16 @@ private struct TunnelRow: View {
         }
     }
 
+    @ViewBuilder
+    private var probeButton: some View {
+        if tunnel.destinationReachability != .notApplicable {
+            Button(AppText.string("Check Destination", korean: "대상 확인"), action: onProbe)
+                .buttonStyle(.borderless)
+                .disabled(tunnel.phase != .listening || tunnel.destinationReachability == .probing)
+                .accessibilityLabel(AppText.string("Check tunnel destination", korean: "터널 대상 확인"))
+        }
+    }
+
     private var tunnelIcon: String {
         switch tunnel.direction {
         case .local: "arrow.right"
@@ -801,6 +818,90 @@ private struct TunnelRow: View {
             return "\(listener) → \(destination)"
         }
         return listener
+    }
+}
+
+private struct TunnelDestinationLabel: View {
+    let reachability: TunnelDestinationReachability
+    let direction: TunnelDirectionPresentation
+
+    var body: some View {
+        Label(title, systemImage: symbolName)
+            .font(.caption2)
+            .foregroundStyle(color)
+            .lineLimit(2)
+            .accessibilityLabel(title)
+    }
+
+    private var title: String {
+        switch reachability {
+        case .notApplicable:
+            AppText.string("No destination to check", korean: "확인할 대상 없음")
+        case .notProbed:
+            AppText.string("Destination not checked", korean: "대상 미확인")
+        case .probing:
+            AppText.string("Checking destination", korean: "대상 확인 중")
+        case .reachable:
+            reachabilitySuccessTitle
+        case let .unreachable(message):
+            reachabilityFailureTitle(message)
+        }
+    }
+
+    private var reachabilitySuccessTitle: String {
+        switch direction {
+        case .local, .localSocket:
+            AppText.string(
+                "Destination reachable through listener",
+                korean: "listener를 통한 대상 연결 가능"
+            )
+        case .remote, .remoteSocket:
+            AppText.string(
+                "Local destination reachable",
+                korean: "로컬 대상 연결 가능"
+            )
+        case .dynamic, .remoteDynamic:
+            AppText.string("Destination reachable", korean: "대상 연결 가능")
+        }
+    }
+
+    private func reachabilityFailureTitle(_ message: String) -> String {
+        switch direction {
+        case .local, .localSocket:
+            AppText.string(
+                "Destination unavailable through listener: \(message)",
+                korean: "listener를 통한 대상 연결 실패: \(message)"
+            )
+        case .remote, .remoteSocket:
+            AppText.string(
+                "Local destination unavailable: \(message)",
+                korean: "로컬 대상 연결 실패: \(message)"
+            )
+        case .dynamic, .remoteDynamic:
+            AppText.string(
+                "Destination unavailable: \(message)",
+                korean: "대상 연결 실패: \(message)"
+            )
+        }
+    }
+
+    private var symbolName: String {
+        switch reachability {
+        case .notApplicable: "minus.circle"
+        case .notProbed: "questionmark.circle"
+        case .probing: "arrow.triangle.2.circlepath"
+        case .reachable: "checkmark.circle"
+        case .unreachable: "xmark.octagon"
+        }
+    }
+
+    private var color: Color {
+        switch reachability {
+        case .reachable: .green
+        case .probing: .orange
+        case .unreachable: .red
+        case .notApplicable, .notProbed: .secondary
+        }
     }
 }
 

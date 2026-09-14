@@ -74,6 +74,7 @@ protocol AppWorkspaceService: AnyObject {
     func startTunnel(id: UUID) async throws
     func stopTunnel(id: UUID) async throws
     func restartTunnel(id: UUID) async throws
+    func probeTunnelDestination(id: UUID) async throws
     func saveTunnel(_ draft: ForwardingDraftPresentation, sessionID: UUID?) async throws
     func deleteTunnel(id: UUID) async throws
 
@@ -140,6 +141,7 @@ extension AppWorkspaceService {
     func startTunnel(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("tunnel start") }
     func stopTunnel(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("tunnel stop") }
     func restartTunnel(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("tunnel restart") }
+    func probeTunnelDestination(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("tunnel destination probes") }
     func saveTunnel(_: ForwardingDraftPresentation, sessionID _: UUID?) async throws { throw AppWorkspaceServiceError.unsupported("tunnel editing") }
     func deleteTunnel(id _: UUID) async throws { throw AppWorkspaceServiceError.unsupported("tunnel deletion") }
 

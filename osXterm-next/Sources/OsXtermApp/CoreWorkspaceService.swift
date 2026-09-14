@@ -182,7 +182,7 @@ private final class ManagedTunnel {
     var isIndependent: Bool
     var phase: TunnelPhasePresentation = .stopped
     var assignedPort: Int?
-    var destinationMessage: String?
+    var destinationReachability: TunnelDestinationReachability
     var process: Process?
     var preparedCommand: PreparedOpenSSHCommand?
     var credentialBroker: SessionCredentialBroker?
@@ -196,6 +196,7 @@ private final class ManagedTunnel {
         self.profileID = profileID
         self.sessionID = sessionID
         self.isIndependent = isIndependent
+        destinationReachability = .initial(for: rule)
     }
 
     deinit {
@@ -1113,6 +1114,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
         if tunnel.process?.isRunning != true {
             cleanTunnelResources(tunnel)
             tunnel.phase = .stopped
+            tunnel.destinationReachability = .initial(for: tunnel.rule)
         }
         emitSnapshot()
     }
@@ -1120,6 +1122,43 @@ final class CoreWorkspaceService: AppWorkspaceService {
     func restartTunnel(id: UUID) async throws {
         try await stopTunnel(id: id)
         try await startTunnel(id: id)
+    }
+
+    func probeTunnelDestination(id: UUID) async throws {
+        try await loadIfNeeded()
+        guard let tunnel = tunnels[id] else { throw CoreWorkspaceServiceError.tunnelNotFound }
+        guard tunnel.phase == .listening else {
+            throw CoreWorkspaceServiceError.invalidForwarding(AppText.string(
+                "Start the tunnel and wait for its listener before testing the destination.",
+                korean: "터널을 시작하고 listener가 준비된 뒤에 대상을 확인하세요."
+            ))
+        }
+        guard let target = TunnelDestinationProbe.target(
+            for: tunnel.rule,
+            assignedPort: tunnel.assignedPort
+        ) else {
+            tunnel.destinationReachability = .notApplicable
+            emitSnapshot()
+            return
+        }
+
+        tunnel.destinationReachability = .probing
+        emitSnapshot()
+        let result = await TunnelDestinationProbe.probe(target)
+        guard let current = tunnels[id], current === tunnel,
+              current.phase == .listening,
+              current.process?.isRunning == true
+        else {
+            return
+        }
+
+        switch result {
+        case .reachable:
+            current.destinationReachability = .reachable
+        case let .unreachable(failure):
+            current.destinationReachability = .unreachable(message: destinationProbeMessage(for: failure))
+        }
+        emitSnapshot()
     }
 
     func saveTunnel(_ draft: ForwardingDraftPresentation, sessionID: UUID?) async throws {
@@ -1624,6 +1663,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             bindAddress: tunnel.rule.bindAddress,
             listeningEndpoint: tunnelEndpoint(tunnel),
             destination: tunnelDestination(tunnel.rule),
+            destinationReachability: tunnel.destinationReachability,
             phase: tunnel.phase,
             sessionID: tunnel.sessionID,
             isIndependent: tunnel.isIndependent
@@ -3082,6 +3122,7 @@ final class CoreWorkspaceService: AppWorkspaceService {
             tunnel.challengeGate = gate
             tunnel.userRequestedStop = false
             tunnel.phase = .starting
+            tunnel.destinationReachability = .initial(for: tunnel.rule)
             do {
                 try process.run()
             } catch {
@@ -3107,9 +3148,10 @@ final class CoreWorkspaceService: AppWorkspaceService {
             switch event {
             case let .listenerReady(_, assignedPort):
                 tunnel.assignedPort = assignedPort ?? tunnel.rule.listenPort
-                tunnel.destinationMessage = nil
+                tunnel.destinationReachability = .initial(for: tunnel.rule)
                 tunnel.phase = .listening
             case let .listenerFailed(_, message):
+                tunnel.destinationReachability = .initial(for: tunnel.rule)
                 tunnel.phase = .failed(OpenSSHOutputSanitizer.displayMessage(message))
             }
         }
@@ -3135,15 +3177,43 @@ final class CoreWorkspaceService: AppWorkspaceService {
         cleanTunnelResources(tunnel)
         if stoppedByUser || status == 0 {
             tunnel.phase = .stopped
+            tunnel.destinationReachability = .initial(for: tunnel.rule)
         } else if case .failed = existingPhase {
             tunnel.phase = existingPhase
+            tunnel.destinationReachability = .initial(for: tunnel.rule)
         } else {
             tunnel.phase = .failed(AppText.string(
                 "OpenSSH tunnel exited with status \(status).",
                 korean: "OpenSSH 터널이 상태 \(status)로 종료되었습니다."
             ))
+            tunnel.destinationReachability = .initial(for: tunnel.rule)
         }
         emitSnapshot()
+    }
+
+    private func destinationProbeMessage(for failure: TunnelDestinationProbeFailure) -> String {
+        switch failure {
+        case .invalidEndpoint:
+            AppText.string(
+                "The tunnel endpoint is invalid.",
+                korean: "터널 endpoint가 올바르지 않습니다."
+            )
+        case .unavailable:
+            AppText.string(
+                "The destination is unavailable.",
+                korean: "대상 서비스에 연결할 수 없습니다."
+            )
+        case .refused:
+            AppText.string(
+                "The destination refused the connection.",
+                korean: "대상 서비스가 연결을 거부했습니다."
+            )
+        case .timedOut:
+            AppText.string(
+                "The destination probe timed out.",
+                korean: "대상 확인 시간이 초과되었습니다."
+            )
+        }
     }
 
     private func cleanTunnelResources(_ tunnel: ManagedTunnel) {

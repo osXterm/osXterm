@@ -1,10 +1,22 @@
 import Foundation
 
-public enum TunnelDestinationReachability: Equatable, Sendable {
+public enum TunnelDestinationReachability: Hashable, Sendable {
+    case notApplicable
     case notProbed
     case probing
     case reachable
     case unreachable(message: String)
+}
+
+public extension TunnelDestinationReachability {
+    static func initial(for rule: ForwardingRule) -> Self {
+        switch rule.kind {
+        case .dynamic, .remoteDynamic:
+            .notApplicable
+        case .local, .remote, .localUnix, .remoteUnix:
+            .notProbed
+        }
+    }
 }
 
 /// Detailed tunnel state retained alongside the presentation-friendly
@@ -68,7 +80,7 @@ public actor TunnelLifecycle {
             self.rule = rule
             self.status = .stopped
             self.assignedPort = nil
-            self.destination = .notProbed
+            self.destination = .initial(for: rule)
             self.lastError = nil
         }
 
@@ -109,7 +121,7 @@ public actor TunnelLifecycle {
             }
             entry.status = .starting
             entry.assignedPort = nil
-            entry.destination = .notProbed
+            entry.destination = .initial(for: entry.rule)
             entry.lastError = nil
             entries[ruleID] = entry
         }
@@ -125,7 +137,7 @@ public actor TunnelLifecycle {
         let port = assignedPort ?? entry.rule.listenPort
         entry.assignedPort = port
         entry.status = .listening(assignedPort: port)
-        entry.destination = .notProbed
+        entry.destination = .initial(for: entry.rule)
         entry.lastError = nil
         entries[ruleID] = entry
     }
@@ -172,12 +184,12 @@ public actor TunnelLifecycle {
             guard var entry = entries[ruleID], entry.status.isActive else { continue }
             if wasStoppedByUser || status == 0 {
                 entry.status = .stopped
-                entry.destination = .notProbed
+                entry.destination = .initial(for: entry.rule)
                 entry.lastError = nil
             } else {
                 let message = "OpenSSH tunnel process exited with status \(status.map(String.init) ?? "unknown")."
                 entry.status = .failed(message: message)
-                entry.destination = .notProbed
+                entry.destination = .initial(for: entry.rule)
                 entry.lastError = message
             }
             entries[ruleID] = entry
@@ -190,7 +202,7 @@ public actor TunnelLifecycle {
             var entry = try entry(for: ruleID)
             entry.status = .stopped
             entry.assignedPort = nil
-            entry.destination = .notProbed
+            entry.destination = .initial(for: entry.rule)
             entry.lastError = nil
             entries[ruleID] = entry
         }

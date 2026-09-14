@@ -25,8 +25,8 @@ struct TunnelEditorView: View {
                 Text(request.existing == nil ? AppText.string("New Tunnel", korean: "새 터널") : AppText.string("Edit Tunnel", korean: "터널 편집"))
                     .font(.title2.weight(.semibold))
                 Text(AppText.string(
-                    "Listener status reflects the actual OpenSSH result. It does not prove that the destination service is reachable.",
-                    korean: "listener 상태는 실제 OpenSSH 결과를 반영합니다. 대상 서비스에 도달할 수 있다는 뜻은 아닙니다."
+                    "Listener status reflects the actual OpenSSH result. Use Check Destination after it is ready to test service reachability.",
+                    korean: "listener 상태는 실제 OpenSSH 결과를 반영합니다. 준비된 뒤 대상 확인으로 서비스 연결 상태를 검사하세요."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
