@@ -267,6 +267,10 @@ private struct RemoteEditSourceFingerprint: Equatable {
     var sha256: Data
 }
 
+private enum TransferFileIOError: Error {
+    case closed
+}
+
 /// File chunks are read and written on a non-main actor. Network work already
 /// suspends through `SFTPClient`; this keeps local file I/O off the SwiftUI
 /// executor too.
@@ -277,12 +281,18 @@ private actor TransferFileReader {
         handle = try FileHandle(forReadingFrom: url)
     }
 
+    deinit {
+        try? handle?.close()
+    }
+
     func seek(to offset: UInt64) throws {
-        try handle?.seek(toOffset: offset)
+        guard let handle else { throw TransferFileIOError.closed }
+        try handle.seek(toOffset: offset)
     }
 
     func read(upToCount count: Int) throws -> Data {
-        try handle?.read(upToCount: count) ?? Data()
+        guard let handle else { throw TransferFileIOError.closed }
+        return try handle.read(upToCount: count) ?? Data()
     }
 
     func close() {
@@ -298,12 +308,18 @@ private actor TransferFileWriter {
         handle = try FileHandle(forWritingTo: url)
     }
 
+    deinit {
+        try? handle?.close()
+    }
+
     func seek(to offset: UInt64) throws {
-        try handle?.seek(toOffset: offset)
+        guard let handle else { throw TransferFileIOError.closed }
+        try handle.seek(toOffset: offset)
     }
 
     func write(_ data: Data) throws {
-        try handle?.write(contentsOf: data)
+        guard let handle else { throw TransferFileIOError.closed }
+        try handle.write(contentsOf: data)
     }
 
     func close() {
@@ -892,14 +908,21 @@ final class CoreWorkspaceService: AppWorkspaceService {
         let remoteHandle = try await connection.client.open(path: remotePath, flags: [.read])
 
         let manager = FileManager.default
-        guard manager.createFile(atPath: localURL.path, contents: nil) else {
-            throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
-                "Could not create the local editing copy.",
-                korean: "로컬 편집 사본을 만들 수 없습니다."
-            ))
+        let localHandle: TransferFileWriter
+        do {
+            guard manager.createFile(atPath: localURL.path, contents: nil) else {
+                throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                    "Could not create the local editing copy.",
+                    korean: "로컬 편집 사본을 만들 수 없습니다."
+                ))
+            }
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: localURL.path)
+            localHandle = try TransferFileWriter(url: localURL)
+        } catch {
+            try? await connection.client.close(remoteHandle)
+            try? manager.removeItem(at: localURL)
+            throw error
         }
-        try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: localURL.path)
-        let localHandle = try TransferFileWriter(url: localURL)
 
         do {
             var offset: UInt64 = 0
@@ -957,13 +980,19 @@ final class CoreWorkspaceService: AppWorkspaceService {
                 korean: "작업 사본을 연 뒤 원격 파일이 변경되었습니다. 덮어쓰기 전에 새 사본을 열거나 내용을 다시 확인하세요."
             ))
         }
-        _ = try localTransferFingerprint(at: edit.localURL)
-        let input = try TransferFileReader(url: edit.localURL)
         let remoteHandle = try await connection.client.open(
             path: remotePath,
             flags: [.write, .create, .truncate],
             attributes: SFTPFileAttributes(permissions: 0o100644)
         )
+        let input: TransferFileReader
+        do {
+            _ = try localTransferFingerprint(at: edit.localURL)
+            input = try TransferFileReader(url: edit.localURL)
+        } catch {
+            try? await connection.client.close(remoteHandle)
+            throw error
+        }
 
         do {
             var offset: UInt64 = 0
@@ -2526,7 +2555,13 @@ final class CoreWorkspaceService: AppWorkspaceService {
             flags: resumeOffset > 0 ? [.write, .create] : [.write, .create, .truncate],
             attributes: SFTPFileAttributes(permissions: 0o100644)
         )
-        let input = try TransferFileReader(url: localURL)
+        let input: TransferFileReader
+        do {
+            input = try TransferFileReader(url: localURL)
+        } catch {
+            try? await client.close(handle)
+            throw error
+        }
 
         do {
             var offset = UInt64(resumeOffset)
@@ -2621,19 +2656,25 @@ final class CoreWorkspaceService: AppWorkspaceService {
 
         let handle = try await client.open(path: source, flags: [.read])
         let manager = FileManager.default
-        try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if resumeOffset == 0, manager.fileExists(atPath: destination.path) {
-            try manager.removeItem(at: destination)
-        }
-        if !manager.fileExists(atPath: destination.path) {
-            guard manager.createFile(atPath: destination.path, contents: nil) else {
-                throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
-                    "Could not create the local download destination.",
-                    korean: "로컬 다운로드 대상을 만들 수 없습니다."
-                ))
+        let output: TransferFileWriter
+        do {
+            try manager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if resumeOffset == 0, manager.fileExists(atPath: destination.path) {
+                try manager.removeItem(at: destination)
             }
+            if !manager.fileExists(atPath: destination.path) {
+                guard manager.createFile(atPath: destination.path, contents: nil) else {
+                    throw CoreWorkspaceServiceError.invalidProfile(AppText.string(
+                        "Could not create the local download destination.",
+                        korean: "로컬 다운로드 대상을 만들 수 없습니다."
+                    ))
+                }
+            }
+            output = try TransferFileWriter(url: destination)
+        } catch {
+            try? await client.close(handle)
+            throw error
         }
-        let output = try TransferFileWriter(url: destination)
 
         do {
             var offset = UInt64(resumeOffset)

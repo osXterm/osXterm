@@ -137,6 +137,25 @@ struct TransferTaskPlanningTests {
         #expect(task.bytesTransferred == 0)
     }
 
+    @Test
+    func retryCheckpointRoundTripsWithoutLosingItsSourceFingerprint() throws {
+        let fingerprint = TransferSourceFingerprint(
+            size: 4_096,
+            modificationTime: Date(timeIntervalSince1970: 1_234)
+        )
+        var task = fixture(direction: .upload)
+        task.state = .failed
+        task.sourceFingerprint = fingerprint
+        task.retryCount = 1
+
+        let encoded = try JSONEncoder().encode(task)
+        let restored = try JSONDecoder().decode(TransferTask.self, from: encoded)
+
+        #expect(restored.sourceFingerprint == fingerprint)
+        #expect(restored.state == .failed)
+        #expect(restored.retryCount == 1)
+    }
+
     private func fixture(
         direction: TransferDirection,
         localURL: URL = URL(fileURLWithPath: "/private/tmp/osxterm-fixtures/file"),
